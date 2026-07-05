@@ -33,7 +33,11 @@ export default {
 
     if (url.pathname === "/mcp") {
       const auth = await verifyMcpAuth(req, env);
-      if (auth instanceof Response) return auth;
+      if (auth instanceof Response) {
+        console.log(`mcp ${req.method} -> ${auth.status}`);
+        return auth;
+      }
+      console.log(`mcp ${req.method} authenticated: ${auth.email ?? auth.sub}`);
       const props: McpProps = { sub: auth.sub, email: auth.email };
       (ctx as unknown as { props: McpProps }).props = props;
       return KilnMcp.serve("/mcp").fetch(req, env, ctx);

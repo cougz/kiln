@@ -36,6 +36,10 @@ function unsafeClaims(token: string): Record<string, unknown> {
 async function logReject(env: Env, req: Request, reason: string, token?: string | null) {
   try {
     const c = token ? unsafeClaims(token) : {};
+    console.log(
+      `mcp auth reject: ${reason} | iss=${c.iss} aud=${JSON.stringify(c.aud)} ` +
+        `sub=${c.sub} ua=${req.headers.get("user-agent")}`,
+    );
     await env.DB.prepare(
       "INSERT INTO auth_log (reason, iss, aud, sub, email, ua) VALUES (?, ?, ?, ?, ?, ?)",
     )
