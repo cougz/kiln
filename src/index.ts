@@ -14,6 +14,7 @@ export interface Env {
   TEAM_DOMAIN?: string; // <team>.cloudflareaccess.com (JWT path, unused on workers.dev)
   POLICY_AUD?: string; // Access application AUD tag (JWT path)
   MCP_SHARED_SECRET?: string; // secret: Access MCP app custom-header value
+  MCP_PUBLIC?: string; // "true" = /mcp auth disabled (temporary)
 }
 
 const PHASE = "P2";
@@ -32,13 +33,22 @@ export default {
     const url = new URL(req.url);
 
     if (url.pathname === "/mcp") {
-      const auth = await verifyMcpAuth(req, env);
-      if (auth instanceof Response) {
-        console.log(`mcp ${req.method} -> ${auth.status}`);
-        return auth;
+      let props: McpProps;
+      if (env.MCP_PUBLIC === "true") {
+        // auth intentionally disabled (MCP_PUBLIC var) — flip to re-enforce
+        const email =
+          req.headers.get("cf-access-authenticated-user-email") ?? undefined;
+        props = { sub: email ?? "anonymous", email };
+        console.log(`mcp ${req.method} unauthenticated mode: ${props.sub}`);
+      } else {
+        const auth = await verifyMcpAuth(req, env);
+        if (auth instanceof Response) {
+          console.log(`mcp ${req.method} -> ${auth.status}`);
+          return auth;
+        }
+        console.log(`mcp ${req.method} authenticated: ${auth.email ?? auth.sub}`);
+        props = { sub: auth.sub, email: auth.email };
       }
-      console.log(`mcp ${req.method} authenticated: ${auth.email ?? auth.sub}`);
-      const props: McpProps = { sub: auth.sub, email: auth.email };
       (ctx as unknown as { props: McpProps }).props = props;
       return KilnMcp.serve("/mcp").fetch(req, env, ctx);
     }

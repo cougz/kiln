@@ -39,7 +39,11 @@
   // the Access application in Zero Trust.
   "vars": {
     "TEAM_DOMAIN": "cougz.cloudflareaccess.com",
-    "POLICY_AUD": "9709313cd96393b804215f4edb8c008da9cb51c27ab936c7caf0a825d4ea5ed1"
+    "POLICY_AUD": "9709313cd96393b804215f4edb8c008da9cb51c27ab936c7caf0a825d4ea5ed1",
+    // temporary: /mcp open while managed-OAuth client ergonomics (headless
+    // box, no local browser/callback) get sorted in a future session.
+    // Set to "false" (or remove) to re-enforce OAuth immediately.
+    "MCP_PUBLIC": "true"
   },
 
   "r2_buckets": [
