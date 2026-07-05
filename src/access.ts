@@ -58,7 +58,10 @@ export async function verifyMcpAuth(
     return new Response("invalid MCP key", { status: 403 });
   }
 
-  const token = req.headers.get("cf-access-jwt-assertion");
+  const bearer = req.headers.get("authorization");
+  const token =
+    req.headers.get("cf-access-jwt-assertion") ??
+    (bearer?.startsWith("Bearer ") ? bearer.slice(7) : null);
   if (jwtConfigured && token) {
     if (!jwks || jwksTeam !== env.TEAM_DOMAIN) {
       jwks = createRemoteJWKSet(
@@ -77,9 +80,17 @@ export async function verifyMcpAuth(
     }
   }
 
+  // RFC 9728: point OAuth-capable MCP clients at the protected-resource
+  // metadata so they can discover Access as the authorization server.
+  const origin = new URL(req.url).origin;
   return new Response(
-    "unauthorized: connect through the Access MCP portal (or supply a valid " +
-      "Access JWT)",
-    { status: 401 },
+    "unauthorized: authenticate via OAuth (see WWW-Authenticate) or the " +
+      "Access MCP portal",
+    {
+      status: 401,
+      headers: {
+        "www-authenticate": `Bearer realm="kiln", resource_metadata="${origin}/.well-known/oauth-protected-resource"`,
+      },
+    },
   );
 }

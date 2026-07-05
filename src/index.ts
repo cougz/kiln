@@ -43,6 +43,22 @@ export default {
       return Response.json(serverCard(url.origin));
     }
 
+    // RFC 9728 protected-resource metadata: Access is the authorization
+    // server (managed OAuth incl. dynamic client registration).
+    if (
+      url.pathname === "/.well-known/oauth-protected-resource" ||
+      url.pathname === "/.well-known/oauth-protected-resource/mcp"
+    ) {
+      if (!env.TEAM_DOMAIN) return new Response("not configured", { status: 404 });
+      return Response.json({
+        resource: `${url.origin}/mcp`,
+        authorization_servers: [`https://${env.TEAM_DOMAIN}`],
+        bearer_methods_supported: ["header"],
+        resource_name: "kiln",
+        resource_documentation: `${url.origin}/llms.txt`,
+      });
+    }
+
     if (url.pathname === "/api/health") {
       let d1 = false;
       let r2 = false;

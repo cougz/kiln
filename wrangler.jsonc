@@ -38,8 +38,8 @@
   // Cf-Access-Jwt-Assertion on /mcp against these. Set after creating
   // the Access application in Zero Trust.
   "vars": {
-    "TEAM_DOMAIN": "",
-    "POLICY_AUD": ""
+    "TEAM_DOMAIN": "cougz.cloudflareaccess.com",
+    "POLICY_AUD": "" // AUD tag of the Access MCP-server application
   },
 
   "r2_buckets": [
