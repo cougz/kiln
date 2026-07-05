@@ -44,6 +44,11 @@ export default {
       return engine.fetch(new Request(inner.toString(), req));
     }
 
+    if (url.pathname.startsWith("/api/")) {
+      const { handleApi } = await import("./api");
+      return handleApi(req, env, url);
+    }
+
     return env.ASSETS.fetch(req);
   },
 } satisfies ExportedHandler<Env>;
