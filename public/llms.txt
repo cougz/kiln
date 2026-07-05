@@ -4,10 +4,20 @@
 > print-ready STLs, renders, instructions and BOMs. MCP-first: agents
 > connect over remote MCP and bring their own model.
 
-Status: P0 scaffold. The MCP server (with server card at
-/.well-known/mcp.json) arrives in phase P2.
+Status: P1 — cloud CAD builds are live. The MCP server (with server card
+at /.well-known/mcp.json) arrives in phase P2. Live phase: GET /api/health.
 
 ## API (current)
-- GET /api/health: Worker liveness
-- GET /api/engine/healthz: engine container liveness
+- GET /api/health: Worker + bindings liveness (reports current phase)
+- GET /api/engine/healthz: engine container + geometry stack versions
 - POST /api/engine/measure: raw STL bytes -> extents/bounds/watertight
+- POST /api/projects {slug, name, description?}: create project
+- GET /api/projects | /api/projects/:slug: list / detail
+- PUT /api/projects/:slug/source {path, content}: versioned CAD sources
+- POST /api/projects/:slug/builds: run build (engine executes + verifies:
+  watertight, bed-fit, support-free scan); artifacts to immutable R2 prefix
+- GET /api/projects/:slug/builds/:id: status + verification report
+- GET /api/projects/:slug/builds/:id/artifacts/<path>: download artifact
+
+Note: requests with generic bot user agents may be challenged; send a
+descriptive User-Agent.

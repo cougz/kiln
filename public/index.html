@@ -16,9 +16,15 @@
 <body>
 <main>
   <h1>kiln</h1>
-  <p>agentic parametric CAD — phase P0 scaffold</p>
+  <p>agentic parametric CAD — <span id="phase">…</span></p>
   <p><code>GET /api/health</code> · <code>GET /api/engine/healthz</code> ·
-     <code>POST /api/engine/measure</code></p>
+     <code>POST /api/engine/measure</code> · <code>/api/projects</code></p>
 </main>
+<script>
+fetch("/api/health").then(r => r.json()).then(h => {
+  document.getElementById("phase").textContent =
+    `phase ${h.phase} · d1 ${h.d1 ? "✓" : "✗"} · r2 ${h.r2 ? "✓" : "✗"}`;
+}).catch(() => { document.getElementById("phase").textContent = "api unreachable"; });
+</script>
 </body>
 </html>
