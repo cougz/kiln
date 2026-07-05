@@ -6,9 +6,11 @@ export { KilnEngine };
 export interface Env {
   ENGINE: DurableObjectNamespace<KilnEngine>;
   ASSETS: Fetcher;
+  ARTIFACTS: R2Bucket;
+  DB: D1Database;
 }
 
-const PHASE = "P0";
+const PHASE = "P1";
 
 /**
  * Routes:
@@ -22,7 +24,17 @@ export default {
     const url = new URL(req.url);
 
     if (url.pathname === "/api/health") {
-      return Response.json({ ok: true, service: "kiln", phase: PHASE });
+      let d1 = false;
+      let r2 = false;
+      try {
+        await env.DB.prepare("SELECT 1").first();
+        d1 = true;
+      } catch {}
+      try {
+        await env.ARTIFACTS.head("healthcheck"); // null for missing key, throws only if binding is broken
+        r2 = true;
+      } catch {}
+      return Response.json({ ok: d1 && r2, service: "kiln", phase: PHASE, d1, r2 });
     }
 
     if (url.pathname.startsWith("/api/engine/")) {

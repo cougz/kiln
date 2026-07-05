@@ -31,13 +31,17 @@
     { "tag": "v1", "new_sqlite_classes": ["KilnEngine"] }
   ],
 
-  // ---- P1 (uncomment after creating the resources — see README §Setup):
-  // "r2_buckets": [
-  //   { "binding": "ARTIFACTS", "bucket_name": "kiln-artifacts" }
-  // ],
-  // "d1_databases": [
-  //   { "binding": "DB", "database_name": "kiln", "database_id": "<id>" }
-  // ],
+  "r2_buckets": [
+    { "binding": "ARTIFACTS", "bucket_name": "kiln-artifacts" }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kiln",
+      "database_id": "364479db-4a8d-4125-9485-e093d279c580",
+      "migrations_dir": "migrations"
+    }
+  ],
 
   "observability": {
     "enabled": true
