@@ -1,7 +1,7 @@
 import { getContainer } from "@cloudflare/containers";
 import { KilnEngine } from "./engine";
 import { KilnMcp, type McpProps } from "./mcp";
-import { verifyAccess } from "./access";
+import { verifyMcpAuth } from "./access";
 
 export { KilnEngine, KilnMcp };
 
@@ -11,8 +11,9 @@ export interface Env {
   ASSETS: Fetcher;
   ARTIFACTS: R2Bucket;
   DB: D1Database;
-  TEAM_DOMAIN?: string; // <team>.cloudflareaccess.com
-  POLICY_AUD?: string; // Access application AUD tag
+  TEAM_DOMAIN?: string; // <team>.cloudflareaccess.com (JWT path, unused on workers.dev)
+  POLICY_AUD?: string; // Access application AUD tag (JWT path)
+  MCP_SHARED_SECRET?: string; // secret: Access MCP app custom-header value
 }
 
 const PHASE = "P2";
@@ -31,7 +32,7 @@ export default {
     const url = new URL(req.url);
 
     if (url.pathname === "/mcp") {
-      const auth = await verifyAccess(req, env);
+      const auth = await verifyMcpAuth(req, env);
       if (auth instanceof Response) return auth;
       const props: McpProps = { sub: auth.sub, email: auth.email };
       (ctx as unknown as { props: McpProps }).props = props;
@@ -59,7 +60,7 @@ export default {
         phase: PHASE,
         d1,
         r2,
-        mcp: Boolean(env.TEAM_DOMAIN && env.POLICY_AUD),
+        mcp: Boolean(env.MCP_SHARED_SECRET || (env.TEAM_DOMAIN && env.POLICY_AUD)),
       });
     }
 
@@ -94,8 +95,9 @@ function serverCard(origin: string) {
     authentication: {
       type: "oauth2",
       description:
-        "Cloudflare Access managed OAuth. Requests must carry a valid " +
-        "Cf-Access-Jwt-Assertion for this application.",
+        "Cloudflare Access managed OAuth — connect via the Access MCP " +
+        "portal for this application; direct requests require upstream " +
+        "credentials.",
     },
     capabilities: { tools: true, prompts: true },
   };
