@@ -39,7 +39,7 @@
   // the Access application in Zero Trust.
   "vars": {
     "TEAM_DOMAIN": "cougz.cloudflareaccess.com",
-    "POLICY_AUD": "" // AUD tag of the Access MCP-server application
+    "POLICY_AUD": "81e3c6519b54335991c8bc1b80bd350832f0ba757c4d048020092ffed31ad81b"
   },
 
   "r2_buckets": [
