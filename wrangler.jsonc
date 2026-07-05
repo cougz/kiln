@@ -6,6 +6,7 @@
   "name": "kiln",
   "main": "src/index.ts",
   "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
 
   "assets": {
     "directory": "./public",
@@ -24,12 +25,22 @@
   ],
   "durable_objects": {
     "bindings": [
-      { "name": "ENGINE", "class_name": "KilnEngine" }
+      { "name": "ENGINE", "class_name": "KilnEngine" },
+      { "name": "MCP_OBJECT", "class_name": "KilnMcp" }
     ]
   },
   "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["KilnEngine"] }
+    { "tag": "v1", "new_sqlite_classes": ["KilnEngine"] },
+    { "tag": "v2", "new_sqlite_classes": ["KilnMcp"] }
   ],
+
+  // Access "MCP server" app (managed OAuth): the Worker validates the
+  // Cf-Access-Jwt-Assertion on /mcp against these. Set after creating
+  // the Access application in Zero Trust.
+  "vars": {
+    "TEAM_DOMAIN": "",
+    "POLICY_AUD": ""
+  },
 
   "r2_buckets": [
     { "binding": "ARTIFACTS", "bucket_name": "kiln-artifacts" }
