@@ -4,10 +4,22 @@
 > print-ready STLs, renders, instructions and BOMs. MCP-first: agents
 > connect over remote MCP and bring their own model.
 
-Status: P1 — cloud CAD builds are live. The MCP server (with server card
-at /.well-known/mcp.json) arrives in phase P2. Live phase: GET /api/health.
+Status: P2 — cloud CAD builds and a remote MCP server are live. Live
+phase: GET /api/health.
 
-## API (current)
+## MCP
+- POST/GET /mcp: Streamable HTTP MCP endpoint. 9 tools: list_projects,
+  create_project, get_project, put_source, get_source, run_build,
+  get_build, get_artifact_url, measure. Also serves a 'cad-discipline'
+  prompt with kiln's CAD design rules.
+- GET /.well-known/mcp.json: MCP server card (SEP-1649)
+- GET /.well-known/oauth-protected-resource: RFC 9728 metadata (Cloudflare
+  Access is the authorization server)
+- NOTE: auth is temporarily disabled on /mcp while OAuth client
+  ergonomics are being sorted out (see repo docs/PLAN.md §11) — connect
+  without credentials for now; this will change without notice.
+
+## REST API
 - GET /api/health: Worker + bindings liveness (reports current phase)
 - GET /api/engine/healthz: engine container + geometry stack versions
 - POST /api/engine/measure: raw STL bytes -> extents/bounds/watertight
