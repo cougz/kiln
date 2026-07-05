@@ -43,6 +43,24 @@ export default {
       return Response.json(serverCard(url.origin));
     }
 
+    // Legacy MCP OAuth discovery (2025-03-26 spec): clients that expect
+    // the AS metadata on the resource origin get the team AS's metadata
+    // proxied through.
+    if (
+      url.pathname === "/.well-known/oauth-authorization-server" ||
+      url.pathname === "/.well-known/oauth-authorization-server/mcp" ||
+      url.pathname === "/.well-known/openid-configuration"
+    ) {
+      if (!env.TEAM_DOMAIN) return new Response("not configured", { status: 404 });
+      const upstream = await fetch(
+        `https://${env.TEAM_DOMAIN}/.well-known/oauth-authorization-server`,
+      );
+      return new Response(upstream.body, {
+        status: upstream.status,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
     // RFC 9728 protected-resource metadata: Access is the authorization
     // server (managed OAuth incl. dynamic client registration).
     if (

@@ -23,6 +23,34 @@ export interface AccessClaims {
 let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 let jwksTeam = "";
 
+/** Decode a JWT payload WITHOUT verification — for failure logging only. */
+function unsafeClaims(token: string): Record<string, unknown> {
+  try {
+    const b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(b64));
+  } catch {
+    return {};
+  }
+}
+
+async function logReject(env: Env, req: Request, reason: string, token?: string | null) {
+  try {
+    const c = token ? unsafeClaims(token) : {};
+    await env.DB.prepare(
+      "INSERT INTO auth_log (reason, iss, aud, sub, email, ua) VALUES (?, ?, ?, ?, ?, ?)",
+    )
+      .bind(
+        reason,
+        (c.iss as string) ?? null,
+        JSON.stringify(c.aud ?? null),
+        (c.sub as string) ?? null,
+        (c.email as string) ?? null,
+        req.headers.get("user-agent"),
+      )
+      .run();
+  } catch {}
+}
+
 function timingSafeEqual(a: string, b: string): boolean {
   const enc = new TextEncoder();
   const ab = enc.encode(a);
@@ -55,6 +83,7 @@ export async function verifyMcpAuth(
         req.headers.get("cf-access-authenticated-user-email") ?? undefined;
       return { sub: email ?? "access-portal", email };
     }
+    await logReject(env, req, "bad shared key");
     return new Response("invalid MCP key", { status: 403 });
   }
 
@@ -76,12 +105,14 @@ export async function verifyMcpAuth(
       });
       return { sub: String(payload.sub), email: payload.email as string | undefined };
     } catch (err) {
+      await logReject(env, req, `jwt verify failed: ${err}`, token);
       return new Response(`invalid Access JWT: ${err}`, { status: 403 });
     }
   }
 
   // RFC 9728: point OAuth-capable MCP clients at the protected-resource
   // metadata so they can discover Access as the authorization server.
+  await logReject(env, req, "no credentials", token);
   const origin = new URL(req.url).origin;
   return new Response(
     "unauthorized: authenticate via OAuth (see WWW-Authenticate) or the " +
