@@ -1,0 +1,45 @@
+{
+  // kiln — one Worker, one engine container, one deploy.
+  // Workers Builds runs `npx wrangler deploy` on every push to main;
+  // wrangler builds engine/Dockerfile and pushes it to the integrated
+  // registry as part of the same deploy.
+  "name": "kiln",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-01",
+
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+
+  "containers": [
+    {
+      "class_name": "KilnEngine",
+      "image": "./engine/Dockerfile",
+      "max_instances": 2,
+      // P0 engine is trimesh-only; bump to a larger instance type in P1
+      // when cadquery/OCCT builds land (they want ~1 vCPU / 1+ GiB).
+      "instance_type": "basic"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "ENGINE", "class_name": "KilnEngine" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["KilnEngine"] }
+  ],
+
+  // ---- P1 (uncomment after creating the resources — see README §Setup):
+  // "r2_buckets": [
+  //   { "binding": "ARTIFACTS", "bucket_name": "kiln-artifacts" }
+  // ],
+  // "d1_databases": [
+  //   { "binding": "DB", "database_name": "kiln", "database_id": "<id>" }
+  // ],
+
+  "observability": {
+    "enabled": true
+  }
+}

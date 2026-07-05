@@ -1,0 +1,13 @@
+# kiln
+
+> Agentic parametric-CAD platform: turn CadQuery code into verified,
+> print-ready STLs, renders, instructions and BOMs. MCP-first: agents
+> connect over remote MCP and bring their own model.
+
+Status: P0 scaffold. The MCP server (with server card at
+/.well-known/mcp.json) arrives in phase P2.
+
+## API (current)
+- GET /api/health: Worker liveness
+- GET /api/engine/healthz: engine container liveness
+- POST /api/engine/measure: raw STL bytes -> extents/bounds/watertight

@@ -1,0 +1,7 @@
+# kiln — agentic parametric CAD (P0; service is private during buildout)
+User-agent: *
+Allow: /
+
+# Agent discovery surfaces land in P2/P4:
+#   /.well-known/mcp.json   (MCP server card, SEP-1649)
+#   /llms.txt
