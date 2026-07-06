@@ -1,7 +1,11 @@
-# kiln — agentic parametric CAD (P0; service is private during buildout)
+# kiln — agentic parametric CAD (public, MCP-first)
 User-agent: *
 Allow: /
 
-# Agent discovery surfaces land in P2/P4:
-#   /.well-known/mcp.json   (MCP server card, SEP-1649)
+Sitemap: https://kiln.timcf.workers.dev/sitemap.xml
+
+# Agent discovery surfaces:
+#   /.well-known/mcp.json        MCP server card (SEP-1649)
+#   /.well-known/api-catalog     REST endpoint catalog
 #   /llms.txt
+#   /projects/<slug>             Accept: text/markdown for a plain summary

@@ -4,8 +4,8 @@
 > print-ready STLs, renders, instructions and BOMs. MCP-first: agents
 > connect over remote MCP and bring their own model.
 
-Status: P2 — cloud CAD builds and a remote MCP server are live. Live
-phase: GET /api/health.
+Status: P4 — cloud CAD builds, a remote MCP server, and a project
+gallery/build-page frontend are live. Live phase: GET /api/health.
 
 ## MCP
 - POST/GET /mcp: Streamable HTTP MCP endpoint. 9 tools: list_projects,
@@ -27,6 +27,14 @@ phase: GET /api/health.
   watertight, bed-fit, support-free scan); artifacts to immutable R2 prefix
 - GET /api/projects/:slug/builds/:id: status + verification report
 - GET /api/projects/:slug/builds/:id/artifacts/<path>: download artifact
+
+## Discovery
+- GET /.well-known/mcp.json: MCP server card
+- GET /.well-known/api-catalog: REST endpoint catalog (linked-resources)
+- GET /sitemap.xml: home + one entry per project
+- GET /projects/:slug with `Accept: text/markdown`: plain-text project
+  summary (name, description, sources, recent builds); any other Accept
+  redirects to the frontend's #/p/:slug route.
 
 Note: requests with generic bot user agents may be challenged; send a
 descriptive User-Agent.

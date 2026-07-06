@@ -1,6 +1,7 @@
 import { getContainer } from "@cloudflare/containers";
 import { KilnEngine } from "./engine";
 import { KilnMcp, type McpProps } from "./mcp";
+import * as core from "./core";
 
 export { KilnEngine, KilnMcp };
 
@@ -12,12 +13,15 @@ export interface Env {
   DB: D1Database;
 }
 
-const PHASE = "P3";
+const PHASE = "P4";
 
 /**
  * Routes:
  *   POST/GET /mcp              MCP (Streamable HTTP), open (no auth — see PLAN.md)
  *   GET  /.well-known/mcp.json MCP server card (SEP-1649)
+ *   GET  /.well-known/api-catalog  REST endpoint catalog
+ *   GET  /sitemap.xml          home + one entry per project
+ *   GET  /projects/:slug       text/markdown negotiation, else redirects into the SPA
  *   GET  /api/health           Worker + bindings liveness
  *   ANY  /api/engine/*         proxied into the engine container
  *   ANY  /api/*                REST core (see src/api.ts)
@@ -40,6 +44,34 @@ export default {
 
     if (url.pathname === "/.well-known/mcp.json") {
       return Response.json(serverCard(url.origin));
+    }
+
+    if (url.pathname === "/.well-known/api-catalog") {
+      return Response.json(apiCatalog(url.origin));
+    }
+
+    if (url.pathname === "/sitemap.xml") {
+      return sitemap(env, url.origin);
+    }
+
+    // Content-negotiated project pages: agents following llms.txt / the
+    // API catalog with `Accept: text/markdown` get a markdown summary
+    // (no client-side JS needed); browsers get redirected into the SPA
+    // route the frontend actually understands.
+    const projMatch = url.pathname.match(/^\/projects\/([a-z0-9][a-z0-9-]{1,63})\/?$/);
+    if (projMatch && req.method === "GET") {
+      const accept = req.headers.get("accept") ?? "";
+      if (accept.includes("text/markdown")) {
+        try {
+          const md = await projectMarkdown(env, projMatch[1]);
+          return new Response(md, {
+            headers: { "content-type": "text/markdown; charset=utf-8" },
+          });
+        } catch (e) {
+          return new Response(`error: ${e}`, { status: 404 });
+        }
+      }
+      return Response.redirect(`${url.origin}/#/p/${projMatch[1]}`, 302);
     }
 
     if (url.pathname === "/api/health") {
@@ -94,4 +126,61 @@ function serverCard(origin: string) {
     authentication: { type: "none", description: "Public, unauthenticated MCP server." },
     capabilities: { tools: true, prompts: true },
   };
+}
+
+function apiCatalog(origin: string) {
+  return {
+    "linked-resources": [
+      {
+        href: `${origin}/api/projects`,
+        rel: "collection",
+        title: "kiln projects",
+        description: "REST core over CAD projects, versioned sources, and builds.",
+      },
+      { href: `${origin}/mcp`, rel: "service", title: "kiln MCP server (Streamable HTTP, no auth)" },
+      { href: `${origin}/.well-known/mcp.json`, rel: "describedby", title: "MCP server card (SEP-1649)" },
+      { href: `${origin}/llms.txt`, rel: "describedby", title: "llms.txt" },
+      { href: `${origin}/sitemap.xml`, rel: "sitemap" },
+    ],
+  };
+}
+
+async function sitemap(env: Env, origin: string): Promise<Response> {
+  const projects = (await core.listProjects(env)) as { slug: string }[];
+  const urls = [
+    `<url><loc>${origin}/</loc></url>`,
+    ...projects.map((p) => `<url><loc>${origin}/projects/${p.slug}</loc></url>`),
+  ].join("");
+  const xml =
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`;
+  return new Response(xml, { headers: { "content-type": "application/xml" } });
+}
+
+async function projectMarkdown(env: Env, slug: string): Promise<string> {
+  const p = (await core.getProjectDetail(env, slug)) as unknown as {
+    name: string;
+    slug: string;
+    description: string;
+    sources: { path: string; version: number }[];
+    recent_builds: { id: string; status: string; created_at: string }[];
+  };
+  const lines = [
+    `# ${p.name}`,
+    "",
+    p.description || "_(no description)_",
+    "",
+    "## Sources",
+    ...(p.sources.length
+      ? p.sources.map((s) => `- \`${s.path}\` (v${s.version})`)
+      : ["_(none yet)_"]),
+    "",
+    "## Recent builds",
+    ...(p.recent_builds.length
+      ? p.recent_builds.map((b) => `- \`${b.id}\` — ${b.status} — ${b.created_at}`)
+      : ["_(none yet)_"]),
+    "",
+    `Full REST detail: GET /api/projects/${p.slug}`,
+  ];
+  return lines.join("\n");
 }
