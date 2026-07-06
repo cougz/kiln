@@ -4,27 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>kiln</title>
-<style>
-  body{font-family:system-ui,sans-serif;background:#16161e;color:#e8e8ee;
-       display:grid;place-items:center;min-height:100vh;margin:0}
-  main{text-align:center;padding:24px}
-  h1{font-size:3rem;margin:0;color:#e8a33d}
-  p{color:#9a9aa8;line-height:1.6}
-  code{background:#24242e;padding:2px 8px;border-radius:6px;color:#8fd9a8}
-</style>
+<meta name="description" content="Agentic parametric CAD: turn CadQuery code into verified, print-ready STLs, renders, and docs. MCP-first — agents connect over remote MCP and bring their own model.">
+<link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<main>
-  <h1>kiln</h1>
-  <p>agentic parametric CAD — <span id="phase">…</span></p>
-  <p><code>GET /api/health</code> · <code>GET /api/engine/healthz</code> ·
-     <code>POST /api/engine/measure</code> · <code>/api/projects</code></p>
-</main>
-<script>
-fetch("/api/health").then(r => r.json()).then(h => {
-  document.getElementById("phase").textContent =
-    `phase ${h.phase} · d1 ${h.d1 ? "✓" : "✗"} · r2 ${h.r2 ? "✓" : "✗"}`;
-}).catch(() => { document.getElementById("phase").textContent = "api unreachable"; });
-</script>
+<header>
+  <a href="#/"><h1>kiln</h1></a>
+  <span class="slug">agentic parametric CAD</span>
+  <span class="status" id="status">…</span>
+</header>
+<main id="app"></main>
+<footer>
+  MCP: <code>/mcp</code> (public, no auth) · server card: <code>/.well-known/mcp.json</code> ·
+  <a href="/llms.txt">llms.txt</a> ·
+  <a href="https://github.com/cougz/kiln">source</a>
+</footer>
+<script src="/app.js"></script>
 </body>
 </html>

@@ -264,8 +264,28 @@ verified with curl:
 **Milestone proven (2026-07-06):** an agent (this session) drove a
 complete build through the MCP tools alone — no REST fallback —
 against the live public `/mcp`: `create_project` → `put_source`
-(CadQuery build script) → `run_build` → `get_build` (verified report:
-watertight, bed-fit, support-free) → `measure` (independent re-check of
-extents) → `get_artifact_url`. Details and the resulting project are in
-the P3 section below.
+(CadQuery build script, project `mcp-milestone-coupon`) → `run_build`
+→ `get_build` (verified report: watertight, bed-fit, support-free) →
+`measure` (independent re-check of extents) → `get_artifact_url`
+(confirmed downloadable with a plain `curl`, no auth). The build script
+itself follows the parametric-cad-stl discipline the `cad-discipline`
+prompt carries: the keyhole slot's Y-position is solved algebraically
+from the plate's *measured* extents, not a hand-picked constant, and
+asserted before export.
+
+Two operational findings from the real run:
+- `run_build` on a real (non-trivial) build took long enough that the
+  **MCP client call itself timed out** (`-32001: Request timed out`)
+  even though `timeout_s=300` was passed as the *build's* budget, not
+  the transport's. The build kept running server-side regardless
+  (Durable Object survives the dropped connection) and was recovered
+  by polling `get_project`/`get_build` for the build id. Worth noting
+  in tool descriptions: a `run_build` timeout on the wire does not
+  mean the build failed — always poll before assuming so.
+- The engine image has no fonts installed: `cadquery`'s `.text()`
+  (font-based glyph extrusion, via OCCT's font manager) throws
+  `AttributeError: 'NoneType' object has no attribute 'FontName'`
+  rather than a clear "no font found" error. Noted for anyone hitting
+  the same wall — either install a font package in
+  `engine/Dockerfile` or avoid `.text()` until then.
 ```
