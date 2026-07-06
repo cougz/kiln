@@ -109,6 +109,58 @@ pre { padding: 12px 14px; overflow-x: auto; white-space: pre-wrap; word-break: b
   max-width: 260px;
   border-radius: 8px;
   border: 1px solid var(--border);
+  cursor: zoom-in;
+  transition: border-color 0.15s;
+}
+.renders img:hover { border-color: var(--accent); }
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(10,10,14,0.92);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 30px;
+}
+.lightbox.open { display: flex; }
+.lightbox-img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 6px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  cursor: zoom-in;
+  transition: transform 0.15s ease-out;
+}
+.lightbox-img.zoomed {
+  max-width: none;
+  max-height: none;
+  width: auto;
+  cursor: zoom-out;
+  transform: scale(2.2);
+}
+.lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 22px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 2.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.lightbox-close:hover { color: var(--accent); }
+.lightbox-hint {
+  position: absolute;
+  bottom: 18px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+  pointer-events: none;
 }
 
 .artifact-list { list-style: none; padding: 0; margin: 0; }

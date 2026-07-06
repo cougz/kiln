@@ -25,6 +25,69 @@ function artifactUrl(slug, buildId, path) {
   return `/api/projects/${encodeURIComponent(slug)}/builds/${encodeURIComponent(buildId)}/artifacts/${path}`;
 }
 
+// --- render lightbox -------------------------------------------------------
+// Click a render thumbnail to open it full-screen; click again to toggle
+// between "fit to screen" and native-resolution (cursor-following) zoom,
+// so fine detail in a render is actually inspectable. Close via the ×
+// button, Escape, or clicking the backdrop.
+
+let $lightbox = null;
+
+function ensureLightbox() {
+  if ($lightbox) return $lightbox;
+  $lightbox = document.createElement("div");
+  $lightbox.className = "lightbox";
+  $lightbox.innerHTML = `
+    <button class="lightbox-close" type="button" aria-label="Close">&times;</button>
+    <img class="lightbox-img" alt="">
+    <div class="lightbox-hint">click to zoom · Esc to close</div>
+  `;
+  document.body.appendChild($lightbox);
+
+  const $img = $lightbox.querySelector(".lightbox-img");
+
+  const close = () => {
+    $lightbox.classList.remove("open");
+    $img.classList.remove("zoomed");
+  };
+
+  $lightbox.addEventListener("click", (e) => {
+    if (e.target === $img) {
+      if ($img.classList.contains("zoomed")) {
+        $img.classList.remove("zoomed");
+      } else {
+        // zoom in centered on the click position
+        const r = $img.getBoundingClientRect();
+        const ox = ((e.clientX - r.left) / r.width) * 100;
+        const oy = ((e.clientY - r.top) / r.height) * 100;
+        $img.style.transformOrigin = `${ox}% ${oy}%`;
+        $img.classList.add("zoomed");
+      }
+      return;
+    }
+    close();
+  });
+  $lightbox.querySelector(".lightbox-close").addEventListener("click", close);
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && $lightbox.classList.contains("open")) close();
+  });
+
+  return $lightbox;
+}
+
+function openLightbox(src, alt) {
+  const box = ensureLightbox();
+  const $img = box.querySelector(".lightbox-img");
+  $img.classList.remove("zoomed");
+  $img.src = src;
+  $img.alt = alt || "";
+  box.classList.add("open");
+}
+
+function renderThumb(src, alt) {
+  return `<img src="${src}" alt="${esc(alt)}" loading="lazy" onclick="openLightbox('${src}', '${esc(alt).replace(/'/g, "\\'")}')">`;
+}
+
 // --- routes --------------------------------------------------------------
 
 async function routeGallery() {
@@ -144,7 +207,7 @@ async function routeBuild(slug, buildId) {
         <div class="card">
           <h3>Renders</h3>
           <div class="renders">
-            ${images.map((p) => `<img src="${artifactUrl(slug, buildId, p)}" alt="${esc(p)}" loading="lazy">`).join("")}
+            ${images.map((p) => renderThumb(artifactUrl(slug, buildId, p), p)).join("")}
           </div>
         </div>
       ` : ""}
