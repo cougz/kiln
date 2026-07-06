@@ -5,7 +5,7 @@ code and documentation; kiln executes, measures, verifies, renders, and
 publishes the results (STLs, isometric previews, instructions, BOM) —
 exposed to agents over remote MCP.
 
-**Status: P2 done, P3 in progress.** Live at https://kiln.timcf.workers.dev.
+**Status: P0-P4 done.** Live at https://kiln.timcf.workers.dev.
 Roadmap and architecture: [docs/PLAN.md](docs/PLAN.md).
 
 - ✅ **P0** — Worker + engine container scaffold, CI/CD via Workers Builds
@@ -18,8 +18,14 @@ Roadmap and architecture: [docs/PLAN.md](docs/PLAN.md).
   every client-side connection path dead-ended (see `docs/PLAN.md` §7)
   — removed rather than carried as unused complexity. Milestone proven:
   an agent drove a full build end-to-end through the MCP tools alone.
-- 🔧 P3 (Kumo React frontend), P4 (agent-ready polish), P5 (import the
-  rodless blade rack as the first project), P6 (later: copilot, x402)
+- ✅ **P3** — Frontend: vanilla-JS hash-routed SPA (`public/app.js`) over
+  the REST API — project gallery, project detail, build page (report,
+  renders, artifact downloads, inline docs). No bundler (CI doesn't run
+  one); Kumo/React deferred until that changes.
+- ✅ **P4** — Agent-ready polish: `/sitemap.xml`, `/.well-known/api-catalog`,
+  markdown-negotiated `/projects/:slug`, refreshed robots.txt/llms.txt.
+- ⬜ P5 (import the rodless blade rack as the first project + case
+  study), P6 (later: copilot, x402, WebMCP, three.js viewer)
 
 ## Stack
 

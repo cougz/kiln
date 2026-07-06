@@ -149,11 +149,18 @@ docs read-only.
 - **P2 — MCP:** McpAgent with the §5 toolset, server card, public (no
   auth — see §7). *Exit: an agent runs a build end-to-end through the
   MCP tools alone.* ✅ done 2026-07-06.
-- **P3 — Frontend:** Kumo UI — project gallery, build page (renders,
-  report, artifact downloads, inline docs), param diff between builds.
-  Port the nginx publish template as the default project page layout.
-- **P4 — Agent-ready polish:** §6 table complete; WebMCP tools; llms.txt;
-  markdown negotiation; API catalog.
+- **P3 — Frontend:** project gallery, build page (renders, report,
+  artifact downloads, inline docs). ✅ core done 2026-07-06 as a
+  vanilla-JS hash-routed SPA over the REST API (no bundler — Workers
+  Builds' CI only runs `npm ci` + `wrangler deploy`, so `public/` is
+  served as-is). Deferred: swap in Kumo/React if/when a build step is
+  added to CI; param diff between builds; the nginx publish template's
+  richer per-part layout.
+- **P4 — Agent-ready polish:** ✅ core done 2026-07-06 — sitemap.xml,
+  `/.well-known/api-catalog`, markdown content negotiation on
+  `/projects/:slug`, robots.txt/llms.txt refreshed. Deferred: WebMCP
+  (`navigator.modelContext`) tools, Content Signals, DNS-AID TXT
+  record, Web Bot Auth — all real §6 gaps, none blocking.
 - **P5 — Success story:** import the rodless blade rack (sources, tuned
   params incl. DT_CLR=0.16 and the F-hole fix, docs, photos) as the
   first project + a case-study page.
@@ -288,4 +295,45 @@ Two operational findings from the real run:
   rather than a clear "no font found" error. Noted for anyone hitting
   the same wall — either install a font package in
   `engine/Dockerfile` or avoid `.text()` until then.
+
+**P3 + P4 (2026-07-06):** frontend and agent-ready polish landed in the
+same session as the OAuth removal and milestone proof, per user
+direction to "proceed with frontend and everything else."
+
+- **P3:** `public/app.js` + `public/style.css` — a hash-routed
+  (`#/p/:slug`, `#/p/:slug/b/:id`) vanilla-JS single-page app over the
+  existing REST API, no bundler. Gallery (list + create), project
+  detail (sources, recent builds), build detail (verification report,
+  renders, artifact downloads, inline `.md` docs fetched and rendered
+  as plain text). Chose vanilla JS over Kumo/React deliberately: CI
+  (Workers Builds) only runs `npm ci` + `wrangler deploy`, no bundler
+  step, so a React/Kumo frontend would need its own build pipeline
+  wired in first — deferred, not blocking. Verified live against the
+  real `mcp-milestone-coupon` project data.
+- **P4:** `GET /sitemap.xml` (D1-backed, home + one entry per project),
+  `GET /.well-known/api-catalog` (linked-resources pointing at the REST
+  collection, `/mcp`, the server card, llms.txt, the sitemap),
+  `GET /projects/:slug` content-negotiated on `Accept: text/markdown`
+  (plain summary for agents) vs. a 302 into the SPA's `#/p/:slug` route
+  for browsers. `robots.txt`/`llms.txt` refreshed to drop the stale
+  "private during buildout" framing and advertise all of the above.
+  All four endpoints curl-verified live post-deploy.
+- Both phases deployed via the existing Workers Builds CI/CD (git push
+  → build → deploy), not local `wrangler deploy` — confirmed working
+  by polling `/api/health`'s `phase` field until it flipped after each
+  push.
+
+**Not done this session (explicitly deferred, not forgotten):**
+- **P5 — Success story:** importing the rodless blade rack project
+  (sources live at `/home/admin-ts/mini-itx-rack-mount-design` and
+  `/var/www/3d-projects/mini-itx-rack-mount-design`) as kiln's first
+  real published project + case study. This is a substantial content
+  migration (multiple parts, tuned params, docs, photos) that deserves
+  its own session rather than being rushed alongside the OAuth/P3/P4
+  work.
+- **P6 — Later:** in-app copilot, x402 metering, multi-user, three.js
+  STL viewer. Unchanged from the original plan — genuinely later-stage.
+- **P4 remainder:** WebMCP (`navigator.modelContext`) tools, Content
+  Signals in robots.txt, DNS-AID TXT record, Web Bot Auth. Real gaps
+  against §6, none blocking current usage.
 ```
