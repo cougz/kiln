@@ -13,11 +13,11 @@ printed-part deliverables: STLs, isometric/side renders, instructions,
 BOM, and a published project page — the workflow proven by the mini-ITX
 rack project, lifted off one Linux box onto Cloudflare's edge.
 
-The platform ships **empty** (zero built-in projects). The mini-ITX blade
-rack is imported afterward as the first project and the public success
-story. The LLM does the heavy lifting (writing CadQuery code, docs, BOM
-prose); kiln provides deterministic tools: geometry execution,
-measurement, verification, rendering, artifact storage, publishing.
+The platform ships **empty** (zero built-in projects) and stays that
+way for now — no scheduled import of any specific project. The LLM
+does the heavy lifting (writing CadQuery code, docs, BOM prose); kiln
+provides deterministic tools: geometry execution, measurement,
+verification, rendering, artifact storage, publishing.
 
 **MCP-first:** the webapp performs no inference. Any agent connects over
 remote MCP and brings its own model. A later phase can add an optional
@@ -161,10 +161,7 @@ docs read-only.
   `/projects/:slug`, robots.txt/llms.txt refreshed. Deferred: WebMCP
   (`navigator.modelContext`) tools, Content Signals, DNS-AID TXT
   record, Web Bot Auth — all real §6 gaps, none blocking.
-- **P5 — Success story:** import the rodless blade rack (sources, tuned
-  params incl. DT_CLR=0.16 and the F-hole fix, docs, photos) as the
-  first project + a case-study page.
-- **P6 — Later:** in-app copilot (Workers AI/AI Gateway), x402 metering,
+- **P5 — Later:** in-app copilot (Workers AI/AI Gateway), x402 metering,
   multi-user, STL web viewer (three.js) alongside PNG renders.
 
 ## 9. Repo layout (monorepo, single deploy)
@@ -324,16 +321,14 @@ direction to "proceed with frontend and everything else."
   push.
 
 **Not done this session (explicitly deferred, not forgotten):**
-- **P5 — Success story:** importing the rodless blade rack project
-  (sources live at `/home/admin-ts/mini-itx-rack-mount-design` and
-  `/var/www/3d-projects/mini-itx-rack-mount-design`) as kiln's first
-  real published project + case study. This is a substantial content
-  migration (multiple parts, tuned params, docs, photos) that deserves
-  its own session rather than being rushed alongside the OAuth/P3/P4
-  work.
-- **P6 — Later:** in-app copilot, x402 metering, multi-user, three.js
+- **P5 — Later:** in-app copilot, x402 metering, multi-user, three.js
   STL viewer. Unchanged from the original plan — genuinely later-stage.
 - **P4 remainder:** WebMCP (`navigator.modelContext`) tools, Content
   Signals in robots.txt, DNS-AID TXT record, Web Bot Auth. Real gaps
   against §6, none blocking current usage.
+
+**2026-07-06, later:** the "import the rodless blade rack as a success
+story" phase (formerly P5) was removed from the plan per user request.
+Not deferred — dropped. If a first real project is wanted later, it
+starts as a fresh decision, not a carried-over backlog item.
 ```

@@ -24,8 +24,7 @@ Roadmap and architecture: [docs/PLAN.md](docs/PLAN.md).
   one); Kumo/React deferred until that changes.
 - ✅ **P4** — Agent-ready polish: `/sitemap.xml`, `/.well-known/api-catalog`,
   markdown-negotiated `/projects/:slug`, refreshed robots.txt/llms.txt.
-- ⬜ P5 (import the rodless blade rack as the first project + case
-  study), P6 (later: copilot, x402, WebMCP, three.js viewer)
+- ⬜ P5 (later: copilot, x402, WebMCP, three.js viewer)
 
 ## Stack
 
