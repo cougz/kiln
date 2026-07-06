@@ -114,16 +114,27 @@ docs read-only.
 | WebMCP | Frontend registers `navigator.modelContext` tools (browse projects, trigger builds) for in-browser agents — thin wrappers over the same API |
 | Commerce | None at launch (private). Seam: x402 via Monetization Gateway rules on `/mcp` + artifact routes when/if opened up. |
 
-## 7. Auth (private-first)
+## 7. Auth
 
-- Everything behind **Cloudflare Access** (your employee account / org
-  IdP): web UI, REST, artifact downloads.
-- MCP: `workers-oauth-provider` with **Access as the upstream IdP** —
-  agents do the standard OAuth 2.1 dance, you approve in browser once.
-  Server card + PRM metadata advertise it, so this is the agent-ready
-  OAuth story working end-to-end even while the service is private.
-- Later public phases only change *policy* (Access rules, x402 rules at
-  the edge), not code.
+- **`/mcp` is public and unauthenticated.** Cloudflare Access managed
+  OAuth (the "customer-managed custom MCP server" pattern) was fully
+  implemented and independently verified server-side — RFC 9728
+  protected-resource metadata, legacy AS discovery, dynamic client
+  registration, JWT validation against the team JWKS — but every
+  client-side connection path dead-ended (dashboard sync step, and a
+  localhost-redirect/network-topology mismatch for a real MCP client).
+  Rather than carry that machinery unused, it was removed on
+  2026-07-06: `src/access.ts` deleted, the well-known OAuth/PRM routes
+  dropped, `MCP_PUBLIC`/`TEAM_DOMAIN`/`POLICY_AUD` vars removed from
+  `wrangler.jsonc`. See the P2 status log for the full history.
+- The rest of the surface (web UI, REST, artifact downloads) has no
+  auth either at this stage — kiln is a small, low-stakes public
+  service; the container is the sandbox (scale-to-zero, no secrets
+  inside, R2 access only via the Worker).
+- If real auth is needed later (monetization, multi-user), redo it as
+  a Worker-side OAuth provider (`workers-oauth-provider`) rather than
+  depending on an identity platform's own MCP-connector UI — that's
+  the piece that failed, not OAuth itself.
 
 ## 8. Phases
 
@@ -135,9 +146,9 @@ docs read-only.
   matplotlib), generic build-runner protocol (project scripts declare
   parts + asserts, engine enforces watertight/bed-fit/support scans),
   R2 artifact layout, Workflow pipeline, build reports.
-- **P2 — MCP:** McpAgent with the §5 toolset, OAuth via Access, server
-  card, audit log. *Exit: Claude connects remotely and runs a coupon
-  build end-to-end.*
+- **P2 — MCP:** McpAgent with the §5 toolset, server card, public (no
+  auth — see §7). *Exit: an agent runs a build end-to-end through the
+  MCP tools alone.* ✅ done 2026-07-06.
 - **P3 — Frontend:** Kumo UI — project gallery, build page (renders,
   report, artifact downloads, inline docs), param diff between builds.
   Port the nginx publish template as the default project page layout.
@@ -169,8 +180,10 @@ kiln/
   cadquery + headless matplotlib; registry and 20 GB disk are fine with
   this; cold start of a few seconds is irrelevant next to 2-min builds.
 - **Arbitrary Python from agents:** the container *is* the sandbox
-  (scale-to-zero, no secrets inside, R2 access only via the Worker), and
-  the service is private + OAuth'd + audit-logged.
+  (scale-to-zero, no secrets inside, R2 access only via the Worker).
+  Since `/mcp` and the REST API are public and unauthenticated, this
+  containment is the actual security boundary, not a policy layer —
+  worth revisiting before any monetization or PII enters the picture.
 - **Kumo churn:** young library (v2.6, June 2026); pin versions, keep UI
   thin over the REST API.
 - **WebMCP maturity:** still early-stage; implement as progressive
@@ -193,16 +206,17 @@ was downloaded and re-measured locally with identical extents/
 watertightness — the core loop (write CAD code → cloud build → verified
 artifact) works.
 
-**P2 (2026-07-05): MCP server built, auth temporarily open.**
+**P2 (2026-07-05): MCP server built.**
 `src/mcp.ts` — `KilnMcp` (`McpAgent`) at `/mcp`, Streamable HTTP, 9 tools
 wrapping the REST core + a `cad-discipline` prompt carrying the
 parametric-cad-stl skill's rules. Server card at `/.well-known/mcp.json`
 (SEP-1649).
 
-*Auth saga.* Per user request, `/mcp` uses Cloudflare Access managed
-OAuth (the "customer-managed custom MCP server" pattern), not a
-Worker-side OAuth provider. Everything server-side was implemented and
-independently verified with curl:
+*Auth saga (2026-07-05 → 2026-07-06), concluded: removed.* Per user
+request, `/mcp` initially used Cloudflare Access managed OAuth (the
+"customer-managed custom MCP server" pattern), not a Worker-side OAuth
+provider. Everything server-side was implemented and independently
+verified with curl:
 - RFC 9728 protected-resource metadata at
   `/.well-known/oauth-protected-resource` pointing at
   `https://cougz.cloudflareaccess.com` as the authorization server.
@@ -213,19 +227,17 @@ independently verified with curl:
   by registering a throwaway client directly with curl.
 - JWT validation (`src/access.ts`): verifies `Cf-Access-Jwt-Assertion` or
   a Bearer token against the team JWKS, issuer, and `POLICY_AUD`.
-  Rejected attempts are logged to D1 (`auth_log`, migration `0002`) with
-  the token's unverified claims, specifically so a real failure can be
-  diagnosed instead of guessed at.
+  Rejected attempts were logged to D1 (`auth_log`, migration `0002`).
 - A secondary path, a shared-secret header (`MCP_SHARED_SECRET`,
-  header `x-kiln-mcp-key`), exists for Access's own dashboard
+  header `x-kiln-mcp-key`), existed for Access's own dashboard
   sync/connect step, which authenticates upstream via Custom Headers
   rather than OAuth.
 
 *What didn't work — the client side, not kiln:*
 - The Access dashboard's "Save and connect" sync step (Authentication
-  type = OAuth) fails with an opaque "Invalid oauth credentials. Could
-  not connect to upstream" and no detail reaches our logs — the request
-  apparently never gets past the connector's own client-credential
+  type = OAuth) failed with an opaque "Invalid oauth credentials. Could
+  not connect to upstream" and no detail reached our logs — the request
+  apparently never got past the connector's own client-credential
   check, which looks like it expects a statically-configured OAuth
   client rather than using DCR.
 - Note: the Access "MCP server" app type shows **no AUD tag** when you
@@ -238,25 +250,22 @@ independently verified with curl:
   different network machine than the browser doing the login, so the
   redirect never reached the listener. This is a deployment-topology
   problem, not an Access or kiln bug.
-- **Untried, most promising next step:** a claude.ai custom connector
-  (Settings → Connectors → add `https://kiln.timcf.workers.dev/mcp`).
-  This runs entirely in one browser with a `https://claude.ai/...`
-  redirect URI, sidestepping both failure modes above.
+- A claude.ai custom connector (Settings → Connectors → add the
+  `/mcp` URL directly) was the last untried option, staying entirely in
+  one browser to sidestep both failure modes above. **Decision: not
+  pursued.** Per user direction on 2026-07-06, the whole Access-OAuth
+  path was removed instead of chased further — `src/access.ts` deleted,
+  well-known OAuth/PRM routes and `MCP_PUBLIC`/`TEAM_DOMAIN`/
+  `POLICY_AUD` dropped from `wrangler.jsonc`/`src/index.ts`. `/mcp` is
+  now plainly public; see §7. The `auth_log` D1 table (migration
+  `0002`) is unused but left in place rather than reverting an applied
+  migration.
 
-*Current state:* `wrangler.jsonc` sets `MCP_PUBLIC="true"`, which makes
-`/mcp` skip `verifyMcpAuth` entirely (see `src/index.ts`). This was a
-deliberate, user-requested stopgap to unblock testing the MCP tools
-without further fighting client ergonomics — **not** a rollback of the
-OAuth work, which stays fully implemented and reactivates the moment
-`MCP_PUBLIC` is set back to `"false"` (or removed).
-
-Also filed: brief feedback to the Cloudflare devdocs team that the
-"Secure MCP servers" guide conflates the self-hosted-app + JWT pattern
-with the MCP-server-app + custom-headers pattern, and never states which
-Authentication type unblocks the dashboard sync step.
-
-**Next session:** try the claude.ai connector; if it completes an OAuth
-login, flip `MCP_PUBLIC` back off and confirm `/mcp` enforces auth again.
-Then run the still-unproven milestone: an agent driving a full CAD build
-through the MCP tools end to end.
+**Milestone proven (2026-07-06):** an agent (this session) drove a
+complete build through the MCP tools alone — no REST fallback —
+against the live public `/mcp`: `create_project` → `put_source`
+(CadQuery build script) → `run_build` → `get_build` (verified report:
+watertight, bed-fit, support-free) → `measure` (independent re-check of
+extents) → `get_artifact_url`. Details and the resulting project are in
+the P3 section below.
 ```

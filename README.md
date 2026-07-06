@@ -5,7 +5,7 @@ code and documentation; kiln executes, measures, verifies, renders, and
 publishes the results (STLs, isometric previews, instructions, BOM) —
 exposed to agents over remote MCP.
 
-**Status: P2 built.** Live at https://kiln.timcf.workers.dev.
+**Status: P2 done, P3 in progress.** Live at https://kiln.timcf.workers.dev.
 Roadmap and architecture: [docs/PLAN.md](docs/PLAN.md).
 
 - ✅ **P0** — Worker + engine container scaffold, CI/CD via Workers Builds
@@ -13,29 +13,26 @@ Roadmap and architecture: [docs/PLAN.md](docs/PLAN.md).
   matplotlib), REST API for projects / versioned sources / builds, R2
   artifact archive, D1 metadata
 - ✅ **P2** — MCP server (`/mcp`, 9 tools, server card at
-  `/.well-known/mcp.json`). **Auth is temporarily open**
-  (`MCP_PUBLIC=true` in `wrangler.jsonc`): the full Cloudflare Access
-  OAuth stack is implemented and server-side verified (discovery,
-  dynamic client registration, JWT validation), but every client-side
-  path hit a dead end on 2026-07-05 — see `docs/PLAN.md` §11 for the
-  saga and the next thing to try (a claude.ai custom connector).
-- ⬜ P3 (Kumo React frontend), P4 (agent-ready polish), P5 (import the
+  `/.well-known/mcp.json`). **Public, no auth.** Cloudflare Access
+  managed OAuth was fully implemented and server-side verified, but
+  every client-side connection path dead-ended (see `docs/PLAN.md` §7)
+  — removed rather than carried as unused complexity. Milestone proven:
+  an agent drove a full build end-to-end through the MCP tools alone.
+- 🔧 P3 (Kumo React frontend), P4 (agent-ready polish), P5 (import the
   rodless blade rack as the first project), P6 (later: copilot, x402)
 
 ## Stack
 
 - **Worker** (`src/`, TypeScript): REST API (`src/api.ts`, `src/core.ts`),
-  MCP server (`src/mcp.ts`, `McpAgent`), Access auth (`src/access.ts`),
-  `.well-known/*` discovery, static assets.
+  MCP server (`src/mcp.ts`, `McpAgent`), `.well-known/*` discovery,
+  static assets.
 - **Engine container** (`engine/`, Python/FastAPI): `/build` (run a
   project's script, collect + verify artifacts), `/measure`, `/render`,
   `/artifact`, `/healthz`.
-- **Frontend** (`public/` placeholder): reads live status from
-  `/api/health`; replaced in P3 by React +
-  [@cloudflare/kumo](https://github.com/cloudflare/kumo).
+- **Frontend** (`public/`): reads live status from `/api/health`;
+  project gallery + build pages over the REST API.
 - **R2** (`kiln-artifacts`): immutable per-build artifacts. **D1**
-  (`kiln`): projects, versioned sources, builds, docs, auth debug log
-  (`migrations/`).
+  (`kiln`): projects, versioned sources, builds, docs (`migrations/`).
 
 ## Setup (one-time, already done for this deployment)
 
@@ -50,10 +47,8 @@ Roadmap and architecture: [docs/PLAN.md](docs/PLAN.md).
    npx wrangler d1 create kiln
    npx wrangler d1 migrations apply kiln --remote
    ```
-3. **MCP auth (Access):** `TEAM_DOMAIN` / `POLICY_AUD` vars point at the
-   Access "MCP server" application (see `src/access.ts` for the two
-   accepted auth paths). Currently bypassed via `MCP_PUBLIC=true` — flip
-   to `"false"` (or remove) to re-enforce.
+3. **MCP auth:** none. `/mcp` is intentionally open — see
+   `docs/PLAN.md` §7.
 
 ## Local dev
 
@@ -84,7 +79,7 @@ curl -X PUT https://kiln.timcf.workers.dev/api/projects/demo/source \
      -d '{"path":"build.py","content":"..."}'
 curl -X POST https://kiln.timcf.workers.dev/api/projects/demo/builds
 
-# MCP (currently open, no auth required)
+# MCP (public, no auth required)
 curl -X POST https://kiln.timcf.workers.dev/mcp \
      -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' \
      -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}'

@@ -13,11 +13,8 @@ phase: GET /api/health.
   get_build, get_artifact_url, measure. Also serves a 'cad-discipline'
   prompt with kiln's CAD design rules.
 - GET /.well-known/mcp.json: MCP server card (SEP-1649)
-- GET /.well-known/oauth-protected-resource: RFC 9728 metadata (Cloudflare
-  Access is the authorization server)
-- NOTE: auth is temporarily disabled on /mcp while OAuth client
-  ergonomics are being sorted out (see repo docs/PLAN.md §11) — connect
-  without credentials for now; this will change without notice.
+- NOTE: /mcp is public, unauthenticated. No OAuth, no API key. Connect
+  directly (see repo docs/PLAN.md §7 for why).
 
 ## REST API
 - GET /api/health: Worker + bindings liveness (reports current phase)
