@@ -1,6 +1,7 @@
 // kiln frontend — no build step, vanilla JS hash router over the REST API
 // (src/api.ts). Kept intentionally small: a project gallery, a project
 // detail view, and a build page with report + renders + artifact links.
+// Styling follows the Kumo token spec (see style.css).
 
 const $app = document.getElementById("app");
 const $status = document.getElementById("status");
@@ -19,10 +20,13 @@ const esc = (s) =>
 const fmtDate = (s) => (s ? s.replace("T", " ").replace(/\.\d+Z?$/, "") : "");
 
 const badge = (status) =>
-  `<span class="badge ${esc(status)}">${esc(status)}</span>`;
+  `<span class="k-tag ${esc(status)}">${esc(status)}</span>`;
 
+// Artifact paths come from build scripts (untrusted input) — encode every
+// segment so a crafted filename can't break out of an attribute or URL.
 function artifactUrl(slug, buildId, path) {
-  return `/api/projects/${encodeURIComponent(slug)}/builds/${encodeURIComponent(buildId)}/artifacts/${path}`;
+  const p = String(path).split("/").map(encodeURIComponent).join("/");
+  return `/api/projects/${encodeURIComponent(slug)}/builds/${encodeURIComponent(buildId)}/artifacts/${p}`;
 }
 
 // --- render lightbox -------------------------------------------------------
@@ -85,17 +89,40 @@ function openLightbox(src, alt) {
 }
 
 function renderThumb(src, alt) {
-  return `<img src="${src}" alt="${esc(alt)}" loading="lazy" onclick="openLightbox('${src}', '${esc(alt).replace(/'/g, "\\'")}')">`;
+  return `<img src="${esc(src)}" alt="${esc(alt)}" loading="lazy" data-lightbox>`;
 }
+
+// Delegated clicks: lightbox thumbnails and row links (no inline handlers —
+// artifact names and ids never end up inside executable attributes).
+$app.addEventListener("click", (e) => {
+  const img = e.target.closest("img[data-lightbox]");
+  if (img) {
+    openLightbox(img.src, img.alt);
+    return;
+  }
+  const row = e.target.closest("tr[data-href]");
+  if (row) location.hash = row.dataset.href;
+});
 
 // --- routes --------------------------------------------------------------
 
 async function routeGallery() {
   $app.innerHTML = `
+    <section class="hero">
+      <div class="eyebrow">// COMPUTE · PARAMETRIC CAD</div>
+      <h1>Agentic parametric CAD</h1>
+      <p class="lead">An agent writes CadQuery code; kiln builds it in the
+      cloud and verifies every part — watertight, bed-fit, support-free —
+      then archives STLs, renders, and docs immutably per build.</p>
+      <div class="cta-row">
+        <a class="k-btn k-btn--primary" href="/llms.txt">Connect an agent</a>
+        <a class="k-btn k-btn--ghost" href="https://github.com/cougz/kiln">View source</a>
+      </div>
+    </section>
     <form class="create-project" id="create-form">
       <input name="slug" placeholder="slug (lowercase-dashes)" required pattern="[a-z0-9][a-z0-9-]{1,63}">
       <input name="name" placeholder="name (optional)">
-      <button type="submit">New project</button>
+      <button class="k-btn k-btn--primary" type="submit">New project</button>
     </form>
     <div id="list">Loading projects…</div>
   `;
@@ -125,9 +152,10 @@ async function routeGallery() {
       $list.innerHTML = `<p class="empty">No projects yet — create one above, or connect an agent over MCP (see /llms.txt).</p>`;
       return;
     }
+    $list.className = "card-grid";
     $list.innerHTML = projects.map((p) => `
-      <a class="card card-link" href="#/p/${encodeURIComponent(p.slug)}">
-        <h2>${esc(p.name)}</h2>
+      <a class="k-card card-link" href="#/p/${encodeURIComponent(p.slug)}">
+        <h3>${esc(p.name)}</h3>
         <div class="slug">${esc(p.slug)} · created ${esc(fmtDate(p.created_at))}</div>
         ${p.description ? `<p class="desc">${esc(p.description)}</p>` : ""}
       </a>
@@ -153,7 +181,7 @@ async function routeProject(slug) {
       <table>
         <tr><th>build</th><th>status</th><th>created</th></tr>
         ${p.recent_builds.map((b) => `
-          <tr class="row-link" onclick="location.hash='#/p/${encodeURIComponent(slug)}/b/${encodeURIComponent(b.id)}'">
+          <tr data-href="#/p/${encodeURIComponent(slug)}/b/${encodeURIComponent(b.id)}">
             <td><code>${esc(b.id)}</code></td>
             <td>${badge(b.status)}</td>
             <td>${esc(fmtDate(b.created_at))}</td>
@@ -163,15 +191,13 @@ async function routeProject(slug) {
     ` : `<p class="empty">no builds yet</p>`;
 
     $d.innerHTML = `
-      <div class="card">
-        <h2>${esc(p.name)}</h2>
-        ${p.description ? `<p class="desc">${esc(p.description)}</p>` : ""}
-      </div>
-      <div class="card">
+      <h1 class="page-title">${esc(p.name)}</h1>
+      ${p.description ? `<p class="lead">${esc(p.description)}</p>` : ""}
+      <div class="k-card">
         <h3>Sources</h3>
         <ul class="artifact-list">${sources}</ul>
       </div>
-      <div class="card">
+      <div class="k-card">
         <h3>Builds</h3>
         ${builds}
       </div>
@@ -199,28 +225,26 @@ async function routeBuild(slug, buildId) {
     const other = artifacts.filter((a) => !images.includes(a) && !stls.includes(a) && !docs.includes(a));
 
     $d.innerHTML = `
-      <div class="card">
-        <h2>Build ${esc(buildId)} ${badge(b.status)}</h2>
-        <div class="slug">source v${b.source_version} · created ${esc(fmtDate(b.created_at))}${b.finished_at ? " · finished " + esc(fmtDate(b.finished_at)) : ""}</div>
-      </div>
+      <h1 class="page-title">Build <code>${esc(buildId)}</code> ${badge(b.status)}</h1>
+      <div class="slug">source v${b.source_version} · created ${esc(fmtDate(b.created_at))}${b.finished_at ? " · finished " + esc(fmtDate(b.finished_at)) : ""}</div>
       ${images.length ? `
-        <div class="card">
+        <div class="k-card">
           <h3>Renders</h3>
           <div class="renders">
             ${images.map((p) => renderThumb(artifactUrl(slug, buildId, p), p)).join("")}
           </div>
         </div>
       ` : ""}
-      <div class="card">
+      <div class="k-card">
         <h3>Artifacts</h3>
         ${artifacts.length ? `<ul class="artifact-list">${
           [...stls, ...other, ...images].map((p) => `
-            <li><code>${esc(p)}</code> <a class="btn" href="${artifactUrl(slug, buildId, p)}" download>download</a></li>
+            <li><code>${esc(p)}</code> <a class="k-btn k-btn--ghost k-btn--sm" href="${artifactUrl(slug, buildId, p)}" download>download</a></li>
           `).join("")
         }</ul>` : `<p class="empty">no artifacts</p>`}
       </div>
-      ${docs.map((p) => `<div class="card doc" data-path="${esc(p)}"><h3>${esc(p)}</h3><pre>loading…</pre></div>`).join("")}
-      <div class="card">
+      ${docs.map((p) => `<div class="k-card doc" data-path="${esc(p)}"><h3>${esc(p)}</h3><pre>loading…</pre></div>`).join("")}
+      <div class="k-card">
         <h3>Verification report</h3>
         <pre>${esc(JSON.stringify(report, null, 2))}</pre>
       </div>

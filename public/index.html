@@ -3,21 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>kiln</title>
+<title>kiln — agentic parametric CAD</title>
 <meta name="description" content="Agentic parametric CAD: turn CadQuery code into verified, print-ready STLs, renders, and docs. MCP-first — agents connect over remote MCP and bring their own model.">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<header>
-  <a href="#/"><h1>kiln</h1></a>
-  <span class="slug">agentic parametric CAD</span>
-  <span class="status" id="status">…</span>
+<header class="k-nav">
+  <div class="k-nav-inner">
+    <a class="k-logo" href="#/">kiln</a>
+    <span class="k-nav-tag">// agentic parametric CAD</span>
+    <span class="status" id="status">…</span>
+  </div>
 </header>
-<main id="app"></main>
-<footer>
-  MCP: <code>/mcp</code> (public, no auth) · server card: <code>/.well-known/mcp.json</code> ·
-  <a href="/llms.txt">llms.txt</a> ·
-  <a href="https://github.com/cougz/kiln">source</a>
+<main>
+  <div class="k-container" id="app"></div>
+</main>
+<footer class="k-footer">
+  <div class="k-footer-inner">
+    MCP: <code>/mcp</code> (public, no auth) · server card: <code>/.well-known/mcp.json</code> ·
+    <a href="/llms.txt">llms.txt</a> ·
+    <a href="https://github.com/cougz/kiln">source</a>
+  </div>
 </footer>
 <script src="/app.js"></script>
 </body>
