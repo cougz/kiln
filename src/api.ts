@@ -9,7 +9,7 @@ import type { Env } from "./index";
  *  GET  /api/projects/:slug
  *  PUT  /api/projects/:slug/source           {path, content}
  *  GET  /api/projects/:slug/source/:path     latest version
- *  POST /api/projects/:slug/builds           {entry?, timeout_s?} → runs now
+ *  POST /api/projects/:slug/builds           {entry?, timeout_s?} → 202, queued (poll :id)
  *  GET  /api/projects/:slug/builds
  *  GET  /api/projects/:slug/builds/:n
  *  GET  /api/projects/:slug/builds/:n/artifacts/<path>
@@ -58,7 +58,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       const b = await req
         .json<{ entry?: string; timeout_s?: number }>()
         .catch(() => ({}) as { entry?: string; timeout_s?: number });
-      return json(await core.runBuild(env, slug, b.entry, b.timeout_s));
+      // async: queues a Workflow and returns immediately — poll GET builds/:id
+      return json(await core.runBuild(env, slug, b.entry, b.timeout_s), 202);
     }
     if (seg.length === 4) return json(await core.listBuilds(env, slug));
     if (seg.length === 5) return json(await core.getBuild(env, slug, seg[4]));

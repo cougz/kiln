@@ -3,8 +3,11 @@
 # matplotlib (isometric previews). OCP wheels need libGL at import time.
 FROM python:3.12-slim
 
+# fontconfig + DejaVu: OCCT's font manager needs at least one system font
+# or cadquery's .text() dies with an opaque AttributeError (see PLAN.md).
 RUN apt-get update \
  && apt-get install -y --no-install-recommends libgl1 libxrender1 libxext6 \
+      fontconfig fonts-dejavu-core \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

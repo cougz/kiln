@@ -19,15 +19,15 @@ export interface ProjectRow {
   description: string;
 }
 
-export interface BuildResult {
+export interface QueuedBuild {
   build_id: string;
-  status: string;
-  report: {
-    ok: boolean;
-    artifacts: string[];
-    [k: string]: unknown;
-  };
+  status: "queued";
+  note: string;
 }
+
+const MAX_SOURCE_BYTES = 500_000; // per file; sources are CAD scripts, not assets
+const MAX_PATH_LEN = 160;
+const MAX_ACTIVE_BUILDS = 3; // queued+running per project
 
 export async function listProjects(env: Env) {
   const rows = await env.DB.prepare(
@@ -85,21 +85,32 @@ export async function getProjectDetail(env: Env, slug: string) {
 
 export async function putSource(env: Env, slug: string, path: string, content: string) {
   const project = await getProject(env, slug);
-  if (!path || path.includes("..") || path.startsWith("/")) {
-    throw new ApiError(400, "unsafe or missing path");
+  if (!path || path.includes("..") || path.startsWith("/") || path.length > MAX_PATH_LEN) {
+    throw new ApiError(400, "unsafe, missing, or overlong path");
   }
-  const prev = await env.DB.prepare(
-    "SELECT MAX(version) AS v FROM source WHERE project_id = ? AND path = ?",
-  )
-    .bind(project.id, path)
-    .first<{ v: number | null }>();
-  const version = (prev?.v ?? 0) + 1;
-  await env.DB.prepare(
-    "INSERT INTO source (project_id, path, version, content) VALUES (?, ?, ?, ?)",
-  )
-    .bind(project.id, path, version, content)
-    .run();
-  return { path, version };
+  if (content.length > MAX_SOURCE_BYTES) {
+    throw new ApiError(400, `source too large (${content.length} > ${MAX_SOURCE_BYTES} bytes)`);
+  }
+  // (project_id, path, version) is the primary key, so two concurrent PUTs
+  // reading the same MAX(version) can't both insert — retry the loser.
+  for (let attempt = 0; ; attempt++) {
+    const prev = await env.DB.prepare(
+      "SELECT MAX(version) AS v FROM source WHERE project_id = ? AND path = ?",
+    )
+      .bind(project.id, path)
+      .first<{ v: number | null }>();
+    const version = (prev?.v ?? 0) + 1;
+    try {
+      await env.DB.prepare(
+        "INSERT INTO source (project_id, path, version, content) VALUES (?, ?, ?, ?)",
+      )
+        .bind(project.id, path, version, content)
+        .run();
+      return { path, version };
+    } catch (err) {
+      if (attempt >= 2) throw new ApiError(409, `source version conflict on '${path}'`);
+    }
+  }
 }
 
 export async function getSource(env: Env, slug: string, path: string) {
@@ -158,58 +169,57 @@ export async function runBuild(
   slug: string,
   entry = "build.py",
   timeoutS = 600,
-): Promise<BuildResult> {
+): Promise<QueuedBuild> {
   const project = await getProject(env, slug);
   const sources = await env.DB.prepare(
-    `SELECT s.path, s.content, s.version FROM source s
-     JOIN (SELECT path, MAX(version) AS v FROM source WHERE project_id = ? GROUP BY path) m
-       ON s.path = m.path AND s.version = m.v
-     WHERE s.project_id = ?`,
+    "SELECT path, MAX(version) AS v FROM source WHERE project_id = ? GROUP BY path",
   )
-    .bind(project.id, project.id)
-    .all<{ path: string; content: string; version: number }>();
+    .bind(project.id)
+    .all<{ path: string; v: number }>();
   if (!sources.results.length) {
     throw new ApiError(400, "project has no sources — put_source first");
   }
+  if (!sources.results.some((s) => s.path === entry)) {
+    throw new ApiError(400, `entry '${entry}' is not among the project's sources`);
+  }
+  const active = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM build WHERE project_id = ? AND status IN ('queued','running')",
+  )
+    .bind(project.id)
+    .first<{ n: number }>();
+  if ((active?.n ?? 0) >= MAX_ACTIVE_BUILDS) {
+    throw new ApiError(
+      429,
+      `project already has ${MAX_ACTIVE_BUILDS} builds queued/running — poll get_build first`,
+    );
+  }
 
-  const sourceVersion = Math.max(...sources.results.map((s) => s.version));
+  const sourceVersion = Math.max(...sources.results.map((s) => s.v));
   const buildId = crypto.randomUUID().slice(0, 12);
   const r2Prefix = `projects/${project.id}/builds/${buildId}/`;
   await env.DB.prepare(
-    "INSERT INTO build (id, project_id, source_version, status, r2_prefix) VALUES (?, ?, ?, 'running', ?)",
+    "INSERT INTO build (id, project_id, source_version, status, r2_prefix) VALUES (?, ?, ?, 'queued', ?)",
   )
     .bind(buildId, project.id, sourceVersion, r2Prefix)
     .run();
 
-  const engine = getContainer(env.ENGINE);
-  const files = Object.fromEntries(sources.results.map((s) => [s.path, s.content]));
-  const res = await engine.fetch(
-    new Request("http://engine/build", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ files, entry, timeout_s: timeoutS }),
-    }),
-  );
-  if (!res.ok) {
-    const detail = { engine_error: await res.text() };
-    await finishBuild(env, buildId, "failed", detail);
-    throw new ApiError(502, `engine rejected build: ${JSON.stringify(detail)}`);
-  }
-  const result = (await res.json()) as BuildResult["report"] & { build_id: string };
+  await env.BUILD_WORKFLOW.create({
+    id: buildId,
+    params: {
+      build_id: buildId,
+      project_id: project.id,
+      entry,
+      timeout_s: Math.min(Math.max(timeoutS, 30), 900),
+      r2_prefix: r2Prefix,
+      files: Object.fromEntries(sources.results.map((s) => [s.path, s.v])),
+    },
+  });
 
-  for (const rel of result.artifacts) {
-    const file = await engine.fetch(
-      new Request(`http://engine/artifact/${result.build_id}/${rel}`),
-    );
-    if (file.ok) await env.ARTIFACTS.put(r2Prefix + rel, await file.arrayBuffer());
-  }
-  await engine.fetch(
-    new Request(`http://engine/build/${result.build_id}`, { method: "DELETE" }),
-  );
-
-  const status = result.ok ? "verified" : "failed";
-  await finishBuild(env, buildId, status, result);
-  return { build_id: buildId, status, report: result };
+  return {
+    build_id: buildId,
+    status: "queued",
+    note: "build runs in the background (typically 1-5 min) — poll get_build until status is 'verified' or 'failed'",
+  };
 }
 
 export async function measureArtifact(env: Env, slug: string, buildId: string, path: string) {
@@ -222,7 +232,7 @@ export async function measureArtifact(env: Env, slug: string, buildId: string, p
   return res.json();
 }
 
-async function finishBuild(env: Env, buildId: string, status: string, report: unknown) {
+export async function finishBuild(env: Env, buildId: string, status: string, report: unknown) {
   await env.DB.prepare(
     "UPDATE build SET status = ?, report_json = ?, finished_at = datetime('now') WHERE id = ?",
   )

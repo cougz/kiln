@@ -29,8 +29,9 @@ Roadmap and architecture: [docs/PLAN.md](docs/PLAN.md).
 ## Stack
 
 - **Worker** (`src/`, TypeScript): REST API (`src/api.ts`, `src/core.ts`),
-  MCP server (`src/mcp.ts`, `McpAgent`), `.well-known/*` discovery,
-  static assets.
+  MCP server (`src/mcp.ts`, `McpAgent`), build pipeline Workflow
+  (`src/workflow.ts` — builds are queued and run asynchronously),
+  `.well-known/*` discovery, static assets.
 - **Engine container** (`engine/`, Python/FastAPI): `/build` (run a
   project's script, collect + verify artifacts), `/measure`, `/render`,
   `/artifact`, `/healthz`.
@@ -65,6 +66,7 @@ Builds):
 ```sh
 npm ci
 npm run check                                          # typecheck
+npm run test:engine                                    # engine unit tests (needs python3 + trimesh)
 npx wrangler deploy --dry-run --containers-rollout=none # validate config
 npm run dev                                             # needs local Docker
 ```
@@ -76,13 +78,15 @@ curl https://kiln.timcf.workers.dev/api/health
 curl https://kiln.timcf.workers.dev/api/engine/healthz    # cold start: a few seconds
 curl -X POST --data-binary @part.stl https://kiln.timcf.workers.dev/api/engine/measure
 
-# create a project, add a build script, run it
+# create a project, add a build script, queue a build (202 — async),
+# then poll the returned build_id until 'verified'/'failed'
 curl -X POST https://kiln.timcf.workers.dev/api/projects \
      -H 'content-type: application/json' -d '{"slug":"demo","name":"demo"}'
 curl -X PUT https://kiln.timcf.workers.dev/api/projects/demo/source \
      -H 'content-type: application/json' \
      -d '{"path":"build.py","content":"..."}'
 curl -X POST https://kiln.timcf.workers.dev/api/projects/demo/builds
+curl https://kiln.timcf.workers.dev/api/projects/demo/builds/<build_id>
 
 # MCP (public, no auth required)
 curl -X POST https://kiln.timcf.workers.dev/mcp \

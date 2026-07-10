@@ -8,6 +8,8 @@ import type { Env } from "./index";
 export interface McpProps extends Record<string, unknown> {
   sub: string;
   email?: string;
+  /** request origin, so artifact URLs work on any deployment domain */
+  origin?: string;
 }
 
 const text = (data: unknown) => ({
@@ -119,11 +121,12 @@ export class KilnMcp extends McpAgent<Env, unknown, McpProps> {
 
     s.tool(
       "run_build",
-      "Run the project's build script on the CAD engine (cadquery 2.8 + trimesh " +
-        "+ manifold3d + matplotlib). Blocks until done (typically 1-5 min). Every " +
-        "exported stl/*.stl is verified: watertight, bed fit at Z=0, support-free " +
-        "scan. Artifacts are archived immutably; report includes per-part results " +
-        "and the script's log.",
+      "Queue the project's build script on the CAD engine (cadquery 2.8 + trimesh " +
+        "+ manifold3d + matplotlib). Returns immediately with status 'queued'; the " +
+        "build runs in the background (typically 1-5 min) — poll get_build every " +
+        "~15s until status is 'verified' or 'failed'. Every exported stl/*.stl is " +
+        "verified: watertight, bed fit at Z=0, support-free scan. Artifacts are " +
+        "archived immutably; the report includes per-part results and the script's log.",
       {
         slug: z.string(),
         entry: z.string().default("build.py"),
@@ -158,8 +161,10 @@ export class KilnMcp extends McpAgent<Env, unknown, McpProps> {
       async ({ slug, build_id, path }) => {
         try {
           await core.getArtifact(env, slug, build_id, path); // existence check
+          const origin = this.props?.origin ?? "https://kiln.timcf.workers.dev";
+          const enc = path.split("/").map(encodeURIComponent).join("/");
           return text({
-            url: `https://kiln.timcf.workers.dev/api/projects/${slug}/builds/${build_id}/artifacts/${path}`,
+            url: `${origin}/api/projects/${encodeURIComponent(slug)}/builds/${encodeURIComponent(build_id)}/artifacts/${enc}`,
           });
         } catch (e) {
           return fail(e);

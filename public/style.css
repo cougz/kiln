@@ -319,6 +319,16 @@ pre code { background: none; border: none; padding: 0; color: inherit; }
   pointer-events: none;
 }
 
+/* --- rendered markdown docs ----------------------------------------------------- */
+
+.doc-body h4, .doc-body h5, .doc-body h6 { margin: 18px 0 8px; }
+.doc-body p { font-size: 15px; margin: 8px 0; }
+.doc-body ul, .doc-body ol { padding-left: 22px; font-size: 15px; }
+.doc-body li { margin: 3px 0; }
+.doc-body hr { border: none; border-top: 1px solid var(--line); margin: 18px 0; }
+.doc-body table { margin: 12px 0; font-size: 14px; }
+.doc-body a { color: var(--link); }
+
 /* --- lists / forms ------------------------------------------------------------------ */
 
 .artifact-list { list-style: none; padding: 0; margin: 0; }

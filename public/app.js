@@ -92,6 +92,93 @@ function renderThumb(src, alt) {
   return `<img src="${esc(src)}" alt="${esc(alt)}" loading="lazy" data-lightbox>`;
 }
 
+// --- markdown ---------------------------------------------------------------
+// Small renderer for build docs (INSTRUCTIONS/BOM/etc.). Everything is
+// HTML-escaped before inline markup is applied, and link hrefs are limited
+// to http(s)/relative/# — doc content comes from untrusted build scripts.
+
+function mdInline(s) {
+  // s is already escaped
+  return s
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, t, href) =>
+      /^(https?:\/\/|\/|#|\.)/.test(href) ? `<a href="${href}" rel="noopener">${t}</a>` : m);
+}
+
+function mdToHtml(md) {
+  const lines = String(md).split(/\r?\n/);
+  const out = [];
+  let i = 0;
+  let list = null;
+  let para = [];
+  const flushPara = () => {
+    if (para.length) { out.push(`<p>${mdInline(esc(para.join(" ")))}</p>`); para = []; }
+  };
+  const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^```/.test(line)) {
+      flushPara(); closeList();
+      const buf = [];
+      i++;
+      while (i < lines.length && !/^```/.test(lines[i])) buf.push(lines[i++]);
+      i++;
+      out.push(`<pre>${esc(buf.join("\n"))}</pre>`);
+      continue;
+    }
+    if (
+      line.includes("|") && i + 1 < lines.length &&
+      /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[i + 1]) && lines[i + 1].includes("-")
+    ) {
+      flushPara(); closeList();
+      const cells = (l) => l.replace(/^\s*\|/, "").replace(/\|\s*$/, "")
+        .split("|").map((c) => mdInline(esc(c.trim())));
+      const head = cells(line);
+      i += 2;
+      const rows = [];
+      while (i < lines.length && lines[i].includes("|")) rows.push(cells(lines[i++]));
+      out.push(
+        `<table><tr>${head.map((c) => `<th>${c}</th>`).join("")}</tr>` +
+        rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("") +
+        `</table>`,
+      );
+      continue;
+    }
+    const h = line.match(/^(#{1,6})\s+(.*)/);
+    if (h) {
+      flushPara(); closeList();
+      const n = Math.min(h[1].length + 3, 6); // demote: doc # renders below card h3
+      out.push(`<h${n}>${mdInline(esc(h[2]))}</h${n}>`);
+      i++;
+      continue;
+    }
+    if (/^\s*(-{3,}|\*{3,})\s*$/.test(line)) { flushPara(); closeList(); out.push("<hr>"); i++; continue; }
+    if (/^\s*[-*+]\s+/.test(line)) {
+      flushPara();
+      if (list !== "ul") { closeList(); out.push("<ul>"); list = "ul"; }
+      out.push(`<li>${mdInline(esc(line.replace(/^\s*[-*+]\s+/, "")))}</li>`);
+      i++;
+      continue;
+    }
+    if (/^\s*\d+[.)]\s+/.test(line)) {
+      flushPara();
+      if (list !== "ol") { closeList(); out.push("<ol>"); list = "ol"; }
+      out.push(`<li>${mdInline(esc(line.replace(/^\s*\d+[.)]\s+/, "")))}</li>`);
+      i++;
+      continue;
+    }
+    if (/^\s*$/.test(line)) { flushPara(); closeList(); i++; continue; }
+    para.push(line.trim());
+    i++;
+  }
+  flushPara();
+  closeList();
+  return out.join("\n");
+}
+
 // Delegated clicks: lightbox thumbnails and row links (no inline handlers —
 // artifact names and ids never end up inside executable attributes).
 $app.addEventListener("click", (e) => {
@@ -217,12 +304,27 @@ async function routeBuild(slug, buildId) {
   const $d = document.getElementById("detail");
   try {
     const b = await api(`/projects/${encodeURIComponent(slug)}/builds/${encodeURIComponent(buildId)}`);
+    const inProgress = b.status === "queued" || b.status === "running";
     const report = b.report_json || {};
     const artifacts = report.artifacts || [];
     const images = artifacts.filter((a) => a.endsWith(".png"));
     const stls = artifacts.filter((a) => a.endsWith(".stl"));
     const docs = artifacts.filter((a) => a.endsWith(".md"));
     const other = artifacts.filter((a) => !images.includes(a) && !stls.includes(a) && !docs.includes(a));
+
+    if (inProgress) {
+      $d.innerHTML = `
+        <h1 class="page-title">Build <code>${esc(buildId)}</code> ${badge(b.status)}</h1>
+        <div class="slug">source v${b.source_version} · created ${esc(fmtDate(b.created_at))}</div>
+        <div class="k-card">
+          <h3>Build in progress</h3>
+          <p class="empty">The engine is running this build (typically 1–5 min).
+          This page refreshes automatically.</p>
+        </div>
+      `;
+      pollTimer = setTimeout(() => routeBuild(slug, buildId), 8000);
+      return;
+    }
 
     $d.innerHTML = `
       <h1 class="page-title">Build <code>${esc(buildId)}</code> ${badge(b.status)}</h1>
@@ -243,7 +345,7 @@ async function routeBuild(slug, buildId) {
           `).join("")
         }</ul>` : `<p class="empty">no artifacts</p>`}
       </div>
-      ${docs.map((p) => `<div class="k-card doc" data-path="${esc(p)}"><h3>${esc(p)}</h3><pre>loading…</pre></div>`).join("")}
+      ${docs.map((p) => `<div class="k-card doc" data-path="${esc(p)}"><h3>${esc(p)}</h3><div class="doc-body"><p class="empty">loading…</p></div></div>`).join("")}
       <div class="k-card">
         <h3>Verification report</h3>
         <pre>${esc(JSON.stringify(report, null, 2))}</pre>
@@ -254,8 +356,8 @@ async function routeBuild(slug, buildId) {
       const path = el.dataset.path;
       fetch(artifactUrl(slug, buildId, path))
         .then((r) => r.text())
-        .then((text) => { el.querySelector("pre").textContent = text; })
-        .catch((err) => { el.querySelector("pre").textContent = `error: ${err.message}`; });
+        .then((text) => { el.querySelector(".doc-body").innerHTML = mdToHtml(text); })
+        .catch((err) => { el.querySelector(".doc-body").innerHTML = `<p class="error">${esc(err.message)}</p>`; });
     }
   } catch (err) {
     $d.innerHTML = `<p class="error">${esc(err.message)}</p>`;
@@ -264,7 +366,10 @@ async function routeBuild(slug, buildId) {
 
 // --- router ---------------------------------------------------------------
 
+let pollTimer = null;
+
 function route() {
+  clearTimeout(pollTimer);
   const hash = location.hash.replace(/^#\/?/, "");
   const parts = hash.split("/").filter(Boolean);
   if (parts[0] === "p" && parts[1] && parts[2] === "b" && parts[3]) {

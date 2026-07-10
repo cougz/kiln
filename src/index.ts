@@ -1,13 +1,15 @@
 import { getContainer } from "@cloudflare/containers";
 import { KilnEngine } from "./engine";
 import { KilnMcp, type McpProps } from "./mcp";
+import { KilnBuildWorkflow } from "./workflow";
 import * as core from "./core";
 
-export { KilnEngine, KilnMcp };
+export { KilnEngine, KilnMcp, KilnBuildWorkflow };
 
 export interface Env {
   ENGINE: DurableObjectNamespace<KilnEngine>;
   MCP_OBJECT: DurableObjectNamespace<KilnMcp>;
+  BUILD_WORKFLOW: Workflow;
   ASSETS: Fetcher;
   ARTIFACTS: R2Bucket;
   DB: D1Database;
@@ -37,7 +39,7 @@ export default {
       // deliberately removed — see PLAN.md status log for why).
       const email =
         req.headers.get("cf-access-authenticated-user-email") ?? undefined;
-      const props: McpProps = { sub: email ?? "anonymous", email };
+      const props: McpProps = { sub: email ?? "anonymous", email, origin: url.origin };
       (ctx as unknown as { props: McpProps }).props = props;
       return KilnMcp.serve("/mcp").fetch(req, env, ctx);
     }
@@ -146,10 +148,16 @@ function apiCatalog(origin: string) {
 }
 
 async function sitemap(env: Env, origin: string): Promise<Response> {
-  const projects = (await core.listProjects(env)) as { slug: string }[];
+  const rows = await env.DB.prepare(
+    `SELECT p.slug, substr(COALESCE(MAX(b.created_at), p.created_at), 1, 10) AS lastmod
+     FROM project p LEFT JOIN build b ON b.project_id = p.id
+     GROUP BY p.id ORDER BY p.created_at DESC`,
+  ).all<{ slug: string; lastmod: string }>();
   const urls = [
     `<url><loc>${origin}/</loc></url>`,
-    ...projects.map((p) => `<url><loc>${origin}/projects/${p.slug}</loc></url>`),
+    ...rows.results.map(
+      (p) => `<url><loc>${origin}/projects/${p.slug}</loc><lastmod>${p.lastmod}</lastmod></url>`,
+    ),
   ].join("");
   const xml =
     `<?xml version="1.0" encoding="UTF-8"?>` +

@@ -331,4 +331,45 @@ direction to "proceed with frontend and everything else."
 story" phase (formerly P5) was removed from the plan per user request.
 Not deferred — dropped. If a first real project is wanted later, it
 starts as a fresh decision, not a carried-over backlog item.
+
+**2026-07-10: Kumo restyle + async builds + hardening.**
+
+- **Frontend restyled to the Kumo token spec** (cf-kumo-design): white
+  canvas with automatic light/dark via `light-dark()`, #FF5E1F accent,
+  hairline borders, 16px cards, pill buttons, mono eyebrows/tags, dark
+  code panels. Still the vanilla-JS no-bundler SPA — Kumo the *React
+  library* remains deferred (§8 P3 note stands); this adopts Kumo the
+  *design system*. Also fixed a stored-XSS vector: artifact paths
+  (named by untrusted build scripts) were interpolated unencoded into
+  URLs and an inline onclick — now percent-encoded per segment, with
+  delegated event handlers instead of inline attributes.
+- **Build pipeline is now the §3 Workflow for real** (`src/workflow.ts`,
+  `kiln-build`): `run_build` inserts the build row as `queued`, starts a
+  Workflow instance, and returns immediately (REST: 202) — poll
+  `get_build`. This properly fixes the P2 finding that a multi-minute
+  synchronous `run_build` times out the MCP transport. Source versions
+  are pinned per-path at queue time, so a racing `put_source` can't
+  change what gets built. Engine 4xx → non-retryable; transient
+  failures retry (2 attempts, exponential backoff); a failed workflow
+  always finalizes the build row to `failed`.
+- **Hardening:** `putSource` retries the (project_id, path, version) PK
+  race instead of 500ing; source size (500 KB) / path length caps; max
+  3 queued+running builds per project (429 beyond); `get_artifact_url`
+  derives its origin from the request instead of a hardcoded domain.
+  `jose` (leftover from the removed Access-OAuth path) dropped.
+- **Engine:** `fontconfig` + DejaVu fonts in the image — cadquery
+  `.text()` works now (the 2026-07-06 milestone finding). First test
+  suite: `engine/test_checks.py` + `engine/test_runner.py` (stdlib
+  unittest, `npm run test:engine`), 16 tests covering watertight/
+  bed-fit/on-bed/support-scan verdicts and the runner contract
+  (collection, input exclusion, timeouts, path traversal).
+- **Frontend polish:** build docs (`*.md` artifacts) render as sanitized
+  markdown (headings/lists/tables/code/links) instead of raw `<pre>`;
+  build pages auto-refresh while queued/running; `sitemap.xml` entries
+  carry `<lastmod>` (latest build, else project creation).
+- Still open after this session: WebMCP, Content Signals, DNS-AID,
+  Web Bot Auth (P4 remainder); copilot, x402, multi-user, three.js
+  viewer (P5); the §5 doc/publish toolset (`set_params`,
+  `verify_target`, `render_views`, `list_artifacts`, `put_doc`,
+  `publish`) and an OpenAPI document remain unimplemented.
 ```

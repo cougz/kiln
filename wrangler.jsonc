@@ -18,9 +18,16 @@
       "class_name": "KilnEngine",
       "image": "./engine/Dockerfile",
       "max_instances": 2,
-      // P0 engine is trimesh-only; bump to a larger instance type in P1
-      // when cadquery/OCCT builds land (they want ~1 vCPU / 1+ GiB).
+      // "basic" (1 GiB) has proven sufficient for real cadquery/OCCT
+      // builds (P1-P4); revisit only if a build OOMs.
       "instance_type": "basic"
+    }
+  ],
+  "workflows": [
+    {
+      "name": "kiln-build",
+      "binding": "BUILD_WORKFLOW",
+      "class_name": "KilnBuildWorkflow"
     }
   ],
   "durable_objects": {
