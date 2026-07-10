@@ -10,6 +10,12 @@ RUN apt-get update \
       fontconfig fonts-dejavu-core \
  && rm -rf /var/lib/apt/lists/*
 
+# The OCP wheel vendors its own libfontconfig (cadquery_ocp.libs/) with a
+# baked-in config path that doesn't exist in this image — point it at the
+# apt-installed config explicitly or it still finds zero fonts.
+ENV FONTCONFIG_PATH=/etc/fonts \
+    FONTCONFIG_FILE=/etc/fonts/fonts.conf
+
 WORKDIR /app
 
 COPY requirements.txt .
