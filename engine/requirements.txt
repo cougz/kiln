@@ -5,3 +5,5 @@ numpy>=1.26
 cadquery==2.8.0
 manifold3d
 matplotlib
+rtree
+
