@@ -358,15 +358,30 @@ starts as a fresh decision, not a carried-over backlog item.
   derives its origin from the request instead of a hardcoded domain.
   `jose` (leftover from the removed Access-OAuth path) dropped.
 - **Engine:** `fontconfig` + DejaVu fonts in the image — cadquery
-  `.text()` works now (the 2026-07-06 milestone finding). First test
-  suite: `engine/test_checks.py` + `engine/test_runner.py` (stdlib
-  unittest, `npm run test:engine`), 16 tests covering watertight/
-  bed-fit/on-bed/support-scan verdicts and the runner contract
-  (collection, input exclusion, timeouts, path traversal).
+  `.text()` works now (the 2026-07-06 milestone finding). Gotcha found
+  live: installing the packages was *not* enough — the cadquery_ocp
+  wheel vendors its own relocated `libfontconfig` whose baked-in config
+  path doesn't exist in the image ("Fontconfig error: Cannot load
+  default config file"), so `FONTCONFIG_PATH`/`FONTCONFIG_FILE` must
+  point at `/etc/fonts` explicitly (Dockerfile ENV). First test suite:
+  `engine/test_checks.py` + `engine/test_runner.py` (stdlib unittest,
+  `npm run test:engine`), 16 tests covering watertight/bed-fit/on-bed/
+  support-scan verdicts and the runner contract (collection, input
+  exclusion, timeouts, path traversal).
 - **Frontend polish:** build docs (`*.md` artifacts) render as sanitized
   markdown (headings/lists/tables/code/links) instead of raw `<pre>`;
   build pages auto-refresh while queued/running; `sitemap.xml` entries
   carry `<lastmod>` (latest build, else project creation).
+- **Verified live end-to-end** (project `async-e2e-plate`): queue →
+  workflow → engine → R2 → `verified`, with a CadQuery `.text()` part
+  proving the fonts, an independent re-measure of the downloaded STL
+  (extents exactly 40×12×3, engraving visible in the volume), markdown
+  INSTRUCTIONS.md, `<lastmod>` in the sitemap, and `get_artifact_url`
+  over a real MCP session. Two operational notes: (1) a brand-new
+  Workflow is *not* immediately createable after the deploy goes live —
+  `workflow.not_found` for a couple of minutes until provisioning
+  propagates; (2) a build running during a container-image rollout can
+  be SIGTERM'd (exit −15, empty log) — rerun it.
 - Still open after this session: WebMCP, Content Signals, DNS-AID,
   Web Bot Auth (P4 remainder); copilot, x402, multi-user, three.js
   viewer (P5); the §5 doc/publish toolset (`set_params`,
