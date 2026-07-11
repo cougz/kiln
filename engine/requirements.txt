@@ -6,4 +6,7 @@ cadquery==2.8.0
 manifold3d
 matplotlib
 rtree
+shapely
+networkx
+scipy
 
