@@ -17,7 +17,23 @@ const esc = (s) =>
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   }[c]));
 
-const fmtDate = (s) => (s ? s.replace("T", " ").replace(/\.\d+Z?$/, "") : "");
+// API timestamps are ISO 8601 UTC ("...Z"); render in the viewer's local
+// timezone with an explicit zone label. Bare "YYYY-MM-DD HH:MM:SS" from
+// older responses is UTC too — normalize before parsing.
+const fmtDate = (s) => {
+  if (!s) return "";
+  const d = new Date(/[Z+]/.test(s) ? s : s.replace(" ", "T") + "Z");
+  return isNaN(d)
+    ? s
+    : d.toLocaleString(undefined, {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZoneName: "short",
+      });
+};
 
 const badge = (status) =>
   `<span class="k-tag ${esc(status)}">${esc(status)}</span>`;

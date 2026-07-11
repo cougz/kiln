@@ -29,11 +29,24 @@ const MAX_SOURCE_BYTES = 500_000; // per file; sources are CAD scripts, not asse
 const MAX_PATH_LEN = 160;
 const MAX_ACTIVE_BUILDS = 3; // queued+running per project
 
+// D1's datetime('now') stores "YYYY-MM-DD HH:MM:SS" in UTC with no zone
+// marker; clients (and the frontend) misread it as local time. Make it
+// explicit ISO 8601 UTC before it leaves the API.
+function isoUtc<T extends Record<string, unknown>>(row: T): T {
+  for (const k of ["created_at", "finished_at"]) {
+    const v = row[k];
+    if (typeof v === "string" && v.includes(" ")) {
+      (row as Record<string, unknown>)[k] = v.replace(" ", "T") + "Z";
+    }
+  }
+  return row;
+}
+
 export async function listProjects(env: Env) {
   const rows = await env.DB.prepare(
     "SELECT slug, name, description, created_at FROM project ORDER BY created_at DESC",
   ).all();
-  return rows.results;
+  return rows.results.map(isoUtc);
 }
 
 export async function createProject(
@@ -80,7 +93,7 @@ export async function getProjectDetail(env: Env, slug: string) {
   )
     .bind(project.id)
     .all();
-  return { ...project, sources: sources.results, recent_builds: builds.results };
+  return { ...project, sources: sources.results, recent_builds: builds.results.map(isoUtc) };
 }
 
 export async function putSource(env: Env, slug: string, path: string, content: string) {
@@ -131,7 +144,7 @@ export async function listBuilds(env: Env, slug: string) {
   )
     .bind(project.id)
     .all();
-  return rows.results;
+  return rows.results.map(isoUtc);
 }
 
 interface BuildRow {
@@ -154,7 +167,7 @@ export async function getBuild(env: Env, slug: string, buildId: string) {
     .bind(project.id, buildId)
     .first<BuildRow>();
   if (!build) throw new ApiError(404, `no build '${buildId}'`);
-  return { ...build, report_json: JSON.parse(build.report_json ?? "null") as unknown };
+  return isoUtc({ ...build, report_json: JSON.parse(build.report_json ?? "null") as unknown });
 }
 
 export async function getArtifact(env: Env, slug: string, buildId: string, path: string) {
