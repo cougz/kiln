@@ -31,7 +31,8 @@ const DISCIPLINE = `kiln CAD discipline (from the parametric-cad-stl workflow):
   algebraically from measured inputs, assert targets within tight tolerance.
 - Joined bodies must overlap >= 2mm (named EMBED constant), never touch
   exactly co-planar.
-- Every printed part must fit the bed (default 180x180x180) sitting at Z=0.
+- Every printed part must fit the bed sitting at Z=0 (default 180x180x180;
+  run_build accepts a per-build 'bed' override for larger printers).
 - Export print-oriented STLs to stl/ (slicer-ready, part on bed corner),
   assembly-coordinate copies to asm/; parts that only fit diagonally get
   their 45-degree rotation baked into the stl/ export.
@@ -131,10 +132,11 @@ export class KilnMcp extends McpAgent<Env, unknown, McpProps> {
         slug: z.string(),
         entry: z.string().default("build.py"),
         timeout_s: z.number().int().min(30).max(900).default(600),
+        bed: z.number().min(100).max(1000).default(180),
       },
-      async ({ slug, entry, timeout_s }) => {
+      async ({ slug, entry, timeout_s, bed }) => {
         try {
-          return text(await core.runBuild(env, slug, entry, timeout_s));
+          return text(await core.runBuild(env, slug, entry, timeout_s, bed));
         } catch (e) {
           return fail(e);
         }

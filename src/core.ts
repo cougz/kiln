@@ -182,6 +182,7 @@ export async function runBuild(
   slug: string,
   entry = "build.py",
   timeoutS = 600,
+  bed = 180,
 ): Promise<QueuedBuild> {
   const project = await getProject(env, slug);
   const sources = await env.DB.prepare(
@@ -223,6 +224,7 @@ export async function runBuild(
       project_id: project.id,
       entry,
       timeout_s: Math.min(Math.max(timeoutS, 30), 900),
+      bed: Math.min(Math.max(bed, 100), 1000),
       r2_prefix: r2Prefix,
       files: Object.fromEntries(sources.results.map((s) => [s.path, s.v])),
     },

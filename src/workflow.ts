@@ -18,6 +18,8 @@ export interface BuildWorkflowParams {
   project_id: string;
   entry: string;
   timeout_s: number;
+  /** printer bed size (mm) the engine verifies stl/ exports against */
+  bed?: number;
   r2_prefix: string;
   /** pinned source versions: path -> version */
   files: Record<string, number>;
@@ -67,7 +69,12 @@ export class KilnBuildWorkflow extends WorkflowEntrypoint<Env, BuildWorkflowPara
             new Request("http://engine/build", {
               method: "POST",
               headers: { "content-type": "application/json" },
-              body: JSON.stringify({ files, entry: p.entry, timeout_s: p.timeout_s }),
+              body: JSON.stringify({
+                files,
+                entry: p.entry,
+                timeout_s: p.timeout_s,
+                bed: p.bed ?? 180,
+              }),
             }),
           );
           if (!res.ok) {
