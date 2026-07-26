@@ -15,7 +15,8 @@ gallery/build-page frontend are live. Live phase: GET /api/health.
 - run_build is async: it returns {build_id, status:"queued"} immediately
   and the build runs in the background (typically 1-5 min). Poll
   get_build every ~15s until status is 'verified' or 'failed'.
-- GET /.well-known/mcp.json: MCP server card (SEP-1649)
+- GET /.well-known/mcp/server-card.json: MCP server card (SEP-1649)
+- GET /.well-known/mcp.json: legacy alias for the MCP server card
 - NOTE: /mcp is public, unauthenticated. No OAuth, no API key. Connect
   directly (see repo docs/PLAN.md §7 for why).
 
@@ -33,12 +34,16 @@ gallery/build-page frontend are live. Live phase: GET /api/health.
 - GET /api/projects/:slug/builds/:id/artifacts/<path>: download artifact
 
 ## Discovery
-- GET /.well-known/mcp.json: MCP server card
-- GET /.well-known/api-catalog: REST endpoint catalog (linked-resources)
+- GET /.well-known/mcp/server-card.json: MCP server card
+- GET /.well-known/api-catalog: RFC 9727 linkset catalog for the REST API
+- GET /.well-known/openapi.json: OpenAPI 3.1 REST service description
+- GET /api.md: REST API documentation
+- GET /.well-known/agent-skills/index.json: Agent Skills discovery index
+- GET /agent-skills/kiln-cad-builds/SKILL.md: CAD build workflow skill
 - GET /sitemap.xml: home + one entry per project
-- GET /projects/:slug with `Accept: text/markdown`: plain-text project
-  summary (name, description, sources, recent builds); any other Accept
-  redirects to the frontend's #/p/:slug route.
+- GET / or `/projects/:slug` with `Accept: text/markdown`: markdown for
+  agents. The homepage advertises API discovery resources in RFC 8288 `Link`
+  response headers.
 
 Note: requests with generic bot user agents may be challenged; send a
 descriptive User-Agent.

@@ -22,9 +22,12 @@ Roadmap and architecture: [docs/PLAN.md](docs/PLAN.md).
   the REST API — project gallery, project detail, build page (report,
   renders, artifact downloads, inline docs). No bundler (CI doesn't run
   one); Kumo/React deferred until that changes.
-- ✅ **P4** — Agent-ready polish: `/sitemap.xml`, `/.well-known/api-catalog`,
-  markdown-negotiated `/projects/:slug`, refreshed robots.txt/llms.txt.
-- ⬜ P5 (later: copilot, x402, WebMCP, three.js viewer)
+- ✅ **P4** — Agent-ready discovery: RFC 8288 `Link` headers, RFC 9727
+  linkset API catalog + OpenAPI description, Markdown negotiation for the
+  homepage and project pages, Content Signals, MCP Server Card, Agent Skills
+  index, and progressive WebMCP read tools. DNS-AID with DNSSEC remains a DNS
+  configuration task.
+- ⬜ P5 (later: copilot, x402, multi-user support, three.js viewer)
 
 ## Stack
 
@@ -75,6 +78,11 @@ npm run dev                                             # needs local Docker
 
 ```sh
 curl https://kiln.timcf.workers.dev/api/health
+curl -I https://kiln.timcf.workers.dev/                       # RFC 8288 Link headers
+curl -H 'accept: text/markdown' https://kiln.timcf.workers.dev/
+curl https://kiln.timcf.workers.dev/.well-known/api-catalog
+curl https://kiln.timcf.workers.dev/.well-known/mcp/server-card.json
+curl https://kiln.timcf.workers.dev/.well-known/agent-skills/index.json
 curl https://kiln.timcf.workers.dev/api/engine/healthz    # cold start: a few seconds
 curl -X POST --data-binary @part.stl https://kiln.timcf.workers.dev/api/engine/measure
 

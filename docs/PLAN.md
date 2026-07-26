@@ -156,11 +156,10 @@ docs read-only.
   served as-is). Deferred: swap in Kumo/React if/when a build step is
   added to CI; param diff between builds; the nginx publish template's
   richer per-part layout.
-- **P4 — Agent-ready polish:** ✅ core done 2026-07-06 — sitemap.xml,
-  `/.well-known/api-catalog`, markdown content negotiation on
-  `/projects/:slug`, robots.txt/llms.txt refreshed. Deferred: WebMCP
-  (`navigator.modelContext`) tools, Content Signals, DNS-AID TXT
-  record, Web Bot Auth — all real §6 gaps, none blocking.
+- **P4 — Agent-ready polish:** RFC 8288 Link headers, RFC 9727 linkset API
+  catalog + OpenAPI, homepage/project Markdown negotiation, Content Signals,
+  MCP Server Card, Agent Skills index, and progressive WebMCP read tools are
+  implemented. DNS-AID with DNSSEC and Web Bot Auth remain deployment work.
 - **P5 — Later:** in-app copilot (Workers AI/AI Gateway), x402 metering,
   multi-user, STL web viewer (three.js) alongside PNG renders.
 
@@ -386,5 +385,27 @@ starts as a fresh decision, not a carried-over backlog item.
   Web Bot Auth (P4 remainder); copilot, x402, multi-user, three.js
   viewer (P5); the §5 doc/publish toolset (`set_params`,
   `verify_target`, `render_views`, `list_artifacts`, `put_doc`,
-  `publish`) and an OpenAPI document remain unimplemented.
-```
+   `publish`) and an OpenAPI document remain unimplemented.
+
+**2026-07-26: Agent discovery standards pass.**
+
+- The homepage now returns RFC 8288 `Link` headers for the API catalog,
+  OpenAPI description, service documentation, and MCP server card. It also
+  content-negotiates to markdown on `Accept: text/markdown`; project summary
+  negotiation remains available.
+- `/.well-known/api-catalog` now conforms to RFC 9727/RFC 9264's `linkset`
+  structure, referencing `/.well-known/openapi.json`, `/api.md`, and the
+  health endpoint. The previous `linked-resources` response was discovery
+  metadata but not a valid linkset.
+- The SEP-1649 card is published at
+  `/.well-known/mcp/server-card.json` with `serverInfo`; the original
+  `/.well-known/mcp.json` remains an alias. An Agent Skills discovery index
+  and digest-pinned `kiln-cad-builds` skill are also public.
+- `robots.txt` declares `ai-train=no`, `search=yes`, and `ai-input=yes`.
+  The browser SPA registers read-only `document.modelContext` WebMCP tools
+  when the experimental API is available.
+- DNS-AID cannot be implemented in this repository: publish the appropriate
+  `_index._agents` and/or `_a2a._agents` HTTPS/SVCB records in the zone and
+  enable DNSSEC at the registrar/zone. OAuth/OIDC discovery and `auth.md`
+  intentionally remain absent because every API is public; add them only with
+  a real Worker-side OAuth provider and protected routes.

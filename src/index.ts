@@ -20,8 +20,10 @@ const PHASE = "P4";
 /**
  * Routes:
  *   POST/GET /mcp              MCP (Streamable HTTP), open (no auth — see PLAN.md)
- *   GET  /.well-known/mcp.json MCP server card (SEP-1649)
- *   GET  /.well-known/api-catalog  REST endpoint catalog
+ *   GET  /.well-known/mcp/server-card.json  MCP server card (SEP-1649)
+ *   GET  /.well-known/api-catalog  RFC 9727 API catalog
+ *   GET  /.well-known/openapi.json OpenAPI service description
+ *   GET  /.well-known/agent-skills/index.json Agent Skills index
  *   GET  /sitemap.xml          home + one entry per project
  *   GET  /projects/:slug       text/markdown negotiation, else redirects into the SPA
  *   GET  /api/health           Worker + bindings liveness
@@ -44,12 +46,26 @@ export default {
       return KilnMcp.serve("/mcp").fetch(req, env, ctx);
     }
 
-    if (url.pathname === "/.well-known/mcp.json") {
-      return Response.json(serverCard(url.origin));
+    if (
+      url.pathname === "/.well-known/mcp.json" ||
+      url.pathname === "/.well-known/mcp/server-card.json" ||
+      url.pathname === "/.well-known/mcp/server-cards.json"
+    ) {
+      return json(serverCard(url.origin), "application/mcp-server-card+json");
     }
 
     if (url.pathname === "/.well-known/api-catalog") {
-      return Response.json(apiCatalog(url.origin));
+      return withApiCatalogLink(
+        json(apiCatalog(url.origin), 'application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"'),
+      );
+    }
+
+    if (url.pathname === "/.well-known/openapi.json") {
+      return json(openApi(url.origin), "application/vnd.oai.openapi+json;version=3.1");
+    }
+
+    if (url.pathname === "/.well-known/agent-skills/index.json") {
+      return json(agentSkillsIndex(url.origin));
     }
 
     if (url.pathname === "/sitemap.xml") {
@@ -62,15 +78,12 @@ export default {
     // route the frontend actually understands.
     const projMatch = url.pathname.match(/^\/projects\/([a-z0-9][a-z0-9-]{1,63})\/?$/);
     if (projMatch && req.method === "GET") {
-      const accept = req.headers.get("accept") ?? "";
-      if (accept.includes("text/markdown")) {
+      if (acceptsMarkdown(req)) {
         try {
           const md = await projectMarkdown(env, projMatch[1]);
-          return new Response(md, {
-            headers: { "content-type": "text/markdown; charset=utf-8" },
-          });
+          return markdown(md);
         } catch (e) {
-          return new Response(`error: ${e}`, { status: 404 });
+          return new Response(`error: ${e}`, { status: 404, headers: { vary: "Accept" } });
         }
       }
       return Response.redirect(`${url.origin}/#/p/${projMatch[1]}`, 302);
@@ -109,13 +122,19 @@ export default {
       return handleApi(req, env, url);
     }
 
-    return env.ASSETS.fetch(req);
+    if (url.pathname === "/" && req.method === "GET" && acceptsMarkdown(req)) {
+      return withDiscoveryLinks(markdown(homeMarkdown(url.origin)));
+    }
+
+    const response = await env.ASSETS.fetch(req);
+    return url.pathname === "/" ? withDiscoveryLinks(response) : response;
   },
 } satisfies ExportedHandler<Env>;
 
 function serverCard(origin: string) {
   return {
     $schema: "https://modelcontextprotocol.io/schemas/draft/server-card.json",
+    serverInfo: { name: "kiln", version: "0.2.0" },
     name: "kiln",
     version: "0.2.0",
     description:
@@ -125,26 +144,205 @@ function serverCard(origin: string) {
       "and verifies it.",
     endpoint: `${origin}/mcp`,
     transport: ["streamable-http"],
+    transports: [{ type: "streamable-http", endpoint: `${origin}/mcp` }],
+    remotes: [{ type: "streamable-http", url: `${origin}/mcp` }],
     authentication: { type: "none", description: "Public, unauthenticated MCP server." },
-    capabilities: { tools: true, prompts: true },
+    capabilities: { tools: {}, prompts: {} },
   };
 }
 
 function apiCatalog(origin: string) {
   return {
-    "linked-resources": [
+    linkset: [
       {
-        href: `${origin}/api/projects`,
-        rel: "collection",
-        title: "kiln projects",
-        description: "REST core over CAD projects, versioned sources, and builds.",
+        anchor: `${origin}/api/projects`,
+        "service-desc": [
+          {
+            href: `${origin}/.well-known/openapi.json`,
+            type: "application/vnd.oai.openapi+json;version=3.1",
+            title: "kiln REST OpenAPI description",
+          },
+        ],
+        "service-doc": [
+          {
+            href: `${origin}/api.md`,
+            type: "text/markdown",
+            title: "kiln REST API documentation",
+          },
+        ],
+        status: [{ href: `${origin}/api/health`, type: "application/json" }],
+        "describedby": [{ href: `${origin}/llms.txt`, type: "text/plain" }],
       },
-      { href: `${origin}/mcp`, rel: "service", title: "kiln MCP server (Streamable HTTP, no auth)" },
-      { href: `${origin}/.well-known/mcp.json`, rel: "describedby", title: "MCP server card (SEP-1649)" },
-      { href: `${origin}/llms.txt`, rel: "describedby", title: "llms.txt" },
-      { href: `${origin}/sitemap.xml`, rel: "sitemap" },
+      {
+        anchor: `${origin}/mcp`,
+        "service-doc": [{ href: `${origin}/llms.txt`, type: "text/plain" }],
+        describedby: [{ href: `${origin}/.well-known/mcp/server-card.json`, type: "application/json" }],
+        status: [{ href: `${origin}/api/health`, type: "application/json" }],
+      },
     ],
   };
+}
+
+function openApi(origin: string) {
+  return {
+    openapi: "3.1.1",
+    info: {
+      title: "kiln REST API",
+      version: "0.2.0",
+      description: "Public API for versioned CadQuery projects and asynchronous verified builds.",
+    },
+    servers: [{ url: origin }],
+    paths: {
+      "/api/health": { get: { summary: "Service health", responses: { "200": { description: "Health report" } } } },
+      "/api/projects": {
+        get: { summary: "List projects", responses: { "200": { description: "Projects" } } },
+        post: { summary: "Create a project", responses: { "201": { description: "Created project" } } },
+      },
+      "/api/projects/{slug}": {
+        get: {
+          summary: "Get project detail",
+          parameters: [{ name: "slug", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "Project detail" } },
+        },
+      },
+      "/api/projects/{slug}/source": {
+        put: {
+          summary: "Create a versioned source",
+          parameters: [{ name: "slug", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "Stored source" } },
+        },
+      },
+      "/api/projects/{slug}/source/{path}": {
+        get: {
+          summary: "Get the latest source version",
+          parameters: [
+            { name: "slug", in: "path", required: true, schema: { type: "string" } },
+            { name: "path", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { "200": { description: "Source" } },
+        },
+      },
+      "/api/projects/{slug}/builds": {
+        get: {
+          summary: "List builds",
+          parameters: [{ name: "slug", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "Builds" } },
+        },
+        post: {
+          summary: "Queue a build",
+          parameters: [{ name: "slug", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "202": { description: "Queued build" } },
+        },
+      },
+      "/api/projects/{slug}/builds/{buildId}": {
+        get: {
+          summary: "Get build status and report",
+          parameters: [
+            { name: "slug", in: "path", required: true, schema: { type: "string" } },
+            { name: "buildId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { "200": { description: "Build" } },
+        },
+      },
+      "/api/projects/{slug}/builds/{buildId}/artifacts/{path}": {
+        get: {
+          summary: "Download an immutable build artifact",
+          parameters: [
+            { name: "slug", in: "path", required: true, schema: { type: "string" } },
+            { name: "buildId", in: "path", required: true, schema: { type: "string" } },
+            { name: "path", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { "200": { description: "Artifact" } },
+        },
+      },
+    },
+  };
+}
+
+function agentSkillsIndex(origin: string) {
+  return {
+    $schema: "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+    skills: [
+      {
+        name: "kiln-cad-builds",
+        type: "skill-md",
+        description: "Create versioned CadQuery projects and queue verified print-ready builds with kiln.",
+        url: `${origin}/agent-skills/kiln-cad-builds/SKILL.md`,
+        digest: "sha256:113220b22bab88af3c2cacabf12d508ce9f1ef8c59afddf18400bc776f2cfbba",
+      },
+    ],
+  };
+}
+
+function json(data: unknown, contentType = "application/json; charset=utf-8"): Response {
+  return new Response(JSON.stringify(data), { headers: { "content-type": contentType } });
+}
+
+function acceptsMarkdown(req: Request): boolean {
+  const accept = req.headers.get("accept");
+  if (!accept) return false;
+  const quality = (mediaType: string) => {
+    let best = -1;
+    for (const rawRange of accept.toLowerCase().split(",")) {
+      const [range, ...params] = rawRange.trim().split(";");
+      if (range !== mediaType && range !== "text/*" && range !== "*/*") continue;
+      const q = params.find((param) => param.trim().startsWith("q="))?.split("=")[1];
+      const value = q === undefined ? 1 : Number(q);
+      if (Number.isFinite(value)) best = Math.max(best, value);
+    }
+    return best;
+  };
+  const markdownQuality = quality("text/markdown");
+  return markdownQuality > 0 && markdownQuality > quality("text/html");
+}
+
+function markdown(body: string): Response {
+  return new Response(body, {
+    headers: { "content-type": "text/markdown; charset=utf-8", vary: "Accept" },
+  });
+}
+
+function withDiscoveryLinks(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set(
+    "Link",
+    [
+      '</.well-known/api-catalog>; rel="api-catalog"',
+      '</.well-known/openapi.json>; rel="service-desc"; type="application/vnd.oai.openapi+json"',
+      '</api.md>; rel="service-doc"; type="text/markdown"',
+      '</.well-known/mcp/server-card.json>; rel="describedby"; type="application/json"',
+    ].join(", "),
+  );
+  const vary = headers.get("Vary");
+  if (!vary?.toLowerCase().split(",").map((v) => v.trim()).includes("accept")) {
+    headers.set("Vary", vary ? `${vary}, Accept` : "Accept");
+  }
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+function withApiCatalogLink(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set("Link", '</.well-known/api-catalog>; rel="api-catalog"');
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+function homeMarkdown(origin: string): string {
+  return [
+    "# kiln",
+    "",
+    "Agentic parametric CAD. Submit CadQuery source, queue an asynchronous cloud build, and retrieve verified print-ready artifacts.",
+    "",
+    "## Agent access",
+    "",
+    `- MCP (public Streamable HTTP): ${origin}/mcp`,
+    `- MCP server card: ${origin}/.well-known/mcp/server-card.json`,
+    `- REST API catalog: ${origin}/.well-known/api-catalog`,
+    `- OpenAPI description: ${origin}/.well-known/openapi.json`,
+    `- REST API documentation: ${origin}/api.md`,
+    `- Agent skill: ${origin}/agent-skills/kiln-cad-builds/SKILL.md`,
+    "",
+    "The service is public and currently does not use OAuth or API keys.",
+  ].join("\n");
 }
 
 async function sitemap(env: Env, origin: string): Promise<Response> {
@@ -174,21 +372,31 @@ async function projectMarkdown(env: Env, slug: string): Promise<string> {
     recent_builds: { id: string; status: string; created_at: string }[];
   };
   const lines = [
-    `# ${p.name}`,
+    `# ${markdownText(p.name)}`,
     "",
-    p.description || "_(no description)_",
+    p.description ? markdownText(p.description) : "_(no description)_",
     "",
     "## Sources",
     ...(p.sources.length
-      ? p.sources.map((s) => `- \`${s.path}\` (v${s.version})`)
+      ? p.sources.map((s) => `- \`${markdownCode(s.path)}\` (v${s.version})`)
       : ["_(none yet)_"]),
     "",
     "## Recent builds",
     ...(p.recent_builds.length
-      ? p.recent_builds.map((b) => `- \`${b.id}\` — ${b.status} — ${b.created_at}`)
+      ? p.recent_builds.map(
+          (b) => `- \`${markdownCode(b.id)}\` - ${markdownText(b.status)} - ${markdownText(b.created_at)}`,
+        )
       : ["_(none yet)_"]),
     "",
     `Full REST detail: GET /api/projects/${p.slug}`,
   ];
   return lines.join("\n");
+}
+
+function markdownText(value: string): string {
+  return value.replace(/[\\`*_{}[\]<>#+|]/g, "\\$&").replace(/[\r\n]+/g, " ");
+}
+
+function markdownCode(value: string): string {
+  return value.replace(/`/g, "\\`").replace(/[\r\n]/g, " ");
 }

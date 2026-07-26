@@ -6,6 +6,35 @@
 const $app = document.getElementById("app");
 const $status = document.getElementById("status");
 
+// WebMCP is a progressive enhancement. These read-only tools mirror the
+// public gallery without granting a browser agent additional write access.
+if (document.modelContext?.registerTool) {
+  const webMcp = new AbortController();
+  const register = (tool) => document.modelContext.registerTool(tool, { signal: webMcp.signal }).catch(() => {});
+  register({
+    name: "kiln.list_projects",
+    title: "List kiln projects",
+    description: "List the public parametric CAD projects available in kiln.",
+    inputSchema: { type: "object", additionalProperties: false },
+    annotations: { readOnlyHint: true, untrustedContentHint: true },
+    execute: async () => api("/projects"),
+  });
+  register({
+    name: "kiln.get_project",
+    title: "Get kiln project",
+    description: "Get a public kiln project's versioned sources and recent build summaries.",
+    inputSchema: {
+      type: "object",
+      properties: { slug: { type: "string", description: "Project slug" } },
+      required: ["slug"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, untrustedContentHint: true },
+    execute: async ({ slug }) => api(`/projects/${encodeURIComponent(slug)}`),
+  });
+  addEventListener("pagehide", () => webMcp.abort(), { once: true });
+}
+
 const api = (path) => fetch(`/api${path}`).then(async (r) => {
   const body = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(body.error || `${r.status} ${r.statusText}`);

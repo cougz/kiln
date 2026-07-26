@@ -2,10 +2,13 @@
 User-agent: *
 Allow: /
 
+Content-Signal: ai-train=no, search=yes, ai-input=yes
+
 Sitemap: https://kiln.timcf.workers.dev/sitemap.xml
 
 # Agent discovery surfaces:
-#   /.well-known/mcp.json        MCP server card (SEP-1649)
-#   /.well-known/api-catalog     REST endpoint catalog
+#   /.well-known/mcp/server-card.json  MCP server card (SEP-1649)
+#   /.well-known/api-catalog     RFC 9727 REST endpoint catalog
+#   /.well-known/agent-skills/index.json  Agent Skills index
 #   /llms.txt
 #   /projects/<slug>             Accept: text/markdown for a plain summary
