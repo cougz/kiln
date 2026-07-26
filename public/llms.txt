@@ -1,61 +1,78 @@
-# kiln
+# kiln 0.3.0
 
-> Agentic parametric-CAD platform: turn CadQuery code into verified,
-> print-ready STLs, renders, instructions and BOMs. MCP-first: agents
-> connect over remote MCP and bring their own model.
+> Public versioned CadQuery projects and immutable build archives, with
+> API-key-protected authoring and bounded geometry compute.
 
-Status: P4 — cloud CAD builds, a remote MCP server, versioned parameters and
-documents, standard previews, and a project/gallery build frontend are live.
-Live phase: GET /api/health.
+Production: https://kiln.timcf.workers.dev/
 
-## MCP
-- POST/GET /mcp: Streamable HTTP MCP endpoint. 15 tools: list_projects,
-  create_project, get_project, put_source, get_source, run_build,
-  get_build, list_artifacts, get_artifact_url, verify_target, measure,
-  set_params, get_params, put_doc, get_doc. Also serves a 'cad-discipline'
-  prompt with kiln's CAD design rules.
-- run_build is async: it returns {build_id, status:"queued"} immediately
-  and the build runs in the background (typically 1-5 min). Poll
-  get_build every ~15s until status is 'verified' or 'failed'.
-- GET /.well-known/mcp/server-card.json: MCP server card (SEP-1649)
-- GET /.well-known/mcp.json: legacy alias for the MCP server card
-- NOTE: /mcp is public, unauthenticated. No OAuth, no API key. Connect
-  directly (see repo docs/PLAN.md §7 for why).
+All stored project data is public. Writes and compute require KILN_API_KEY via
+Authorization: Bearer <key> or X-Kiln-API-Key: <key>. There is no OAuth service.
 
-## REST API
-- GET /api/health: Worker + bindings liveness (reports current phase)
-- GET /api/engine/healthz: engine container + geometry stack versions
-- POST /api/engine/measure: raw STL bytes -> extents/bounds/watertight
-- POST /api/projects {slug, name, description?}: create project
-- GET /api/projects | /api/projects/:slug: list / detail
-- PUT /api/projects/:slug/source {path, content}: versioned CAD sources
-- GET/PUT /api/projects/:slug/params: versioned JSON parameters, available to
-  build scripts as `params.json`
-- GET /api/projects/:slug/docs | GET/PUT /api/projects/:slug/docs/:kind:
-  Markdown specification, instructions, BOM, and page documents
-- POST /api/projects/:slug/builds: queue a build (202; poll builds/:id).
-  The engine executes + verifies (watertight, bed-fit, support-free scan);
-  artifacts land in an immutable R2 prefix
-- GET /api/projects/:slug/builds/:id: status + verification report
-  (including the pinned `params` object); verified builds attempt standard
-  `img/kiln-front.png` and `img/kiln-side.png` previews
-- GET /api/projects/:slug/builds/:id/artifacts: authoritative R2 artifact
-  inventory (supports opaque `cursor` pagination)
-- GET /api/projects/:slug/builds/:id/artifacts/<path>: download artifact
-- POST /api/projects/:slug/builds/:id/verify {path, axis, expected, tolerance}:
-  independently verify an STL extent
+Geometry results are bounded preflight heuristics. They do not certify
+printability, support requirements, fit, strength, manufacturing quality,
+regulatory compliance, or safety.
 
-## Discovery
-- GET /.well-known/mcp/server-card.json: MCP server card
-- GET /.well-known/api-catalog: RFC 9727 linkset catalog for the REST API
-- GET /.well-known/openapi.json: OpenAPI 3.1 REST service description
-- GET /api.md: REST API documentation
-- GET /.well-known/agent-skills/index.json: Agent Skills discovery index
-- GET /agent-skills/kiln-cad-builds/SKILL.md: CAD build workflow skill
-- GET /sitemap.xml: home + one entry per project
-- GET / or `/projects/:slug` with `Accept: text/markdown`: markdown for
-  agents. The homepage advertises API discovery resources in RFC 8288 `Link`
-  response headers.
+## Primary interfaces
+- MCP Streamable HTTP: https://kiln.timcf.workers.dev/mcp
+- MCP Registry metadata: https://kiln.timcf.workers.dev/server.json
+- REST guide: https://kiln.timcf.workers.dev/api.md
+- Authentication: https://kiln.timcf.workers.dev/auth.md
+- OpenAPI 3.1.1: https://kiln.timcf.workers.dev/.well-known/openapi.json
+- API catalog: https://kiln.timcf.workers.dev/.well-known/api-catalog
+- Agent skill: https://kiln.timcf.workers.dev/agent-skills/kiln-cad-builds/SKILL.md
 
-Note: requests with generic bot user agents may be challenged; send a
-descriptive User-Agent.
+## MCP surface
+20 tools: list_projects, create_project, update_project, get_project,
+put_source, get_source, list_source_history, set_params, get_params, put_doc,
+get_doc, run_build, retry_build, cancel_build, get_build, list_builds,
+list_artifacts, get_artifact_url, verify_target, measure.
+
+Public read tools require no key. Write tools and compute tools require the API
+key. Tool calls return structured {ok,data} or {ok,error} envelopes, stable
+error fields, behavior annotations, and text equivalents. get_artifact_url also
+returns a resource link. Send the key on every protected tools/call request;
+session initialization is not authorization.
+
+Five public resource templates:
+- kiln://projects/{slug}
+- kiln://projects/{slug}/sources/{+path}
+- kiln://projects/{slug}/documents/{kind}
+- kiln://projects/{slug}/builds/{build_id}
+- kiln://projects/{slug}/builds/{build_id}/artifacts/{+path}
+
+One prompt: cad-discipline.
+
+run_build is asynchronous. It pins every current source path/version/SHA-256,
+exact parameters, entry, timeout, and printer_profile {x,y,z}, then returns the
+canonical build_id. Poll get_build about every 15 seconds until verified,
+failed, or cancelled. Use idempotency_key for uncertain queue delivery.
+cancel_build affects active builds; retry_build creates a new build from exact
+terminal-build inputs.
+
+## REST highlights
+- GET /api/health and GET /api/engine/healthz are public health endpoints.
+- GET /api/projects and all project/source/history/params/docs/build/artifact
+  reads are public.
+- POST/PATCH/PUT project data requires the API key.
+- POST /api/projects/{slug}/builds queues compute with printer_profile x/y/z.
+- POST /api/projects/{slug}/builds/{id}/cancel cancels active work.
+- POST /api/projects/{slug}/builds/{id}/retry queues exact pinned inputs.
+- POST /api/projects/{slug}/builds/{id}/verify compares one STL extent and is
+  protected compute.
+- GET /api/projects/{slug}/builds/{id}/artifacts lists exact artifact SHA-256
+  metadata and supports opaque cursor pagination.
+- The raw engine build, measure, render, and artifact routes are not public.
+
+Current build archives contain exact artifact SHA-256 metadata and
+_kiln/archive-manifest.json. Legacy archives remain readable but explicitly do
+not claim provenance or digest verification. A verified status means geometry
+preflight and archive integrity passed, not that a physical outcome is assured.
+
+## Discovery and content
+- /server.json is MCP Registry metadata.
+- /.well-known/mcp.json, /.well-known/mcp/server-card.json, and
+  /.well-known/mcp/server-cards.json are deprecated compatibility aliases; no
+  ratified Server Card protocol is claimed.
+- /.well-known/agent-skills/index.json is a non-standard compatibility index.
+- Send Accept: text/markdown to / or /projects/{slug} for negotiated Markdown.
+- /sitemap.xml lists the homepage and public project pages.

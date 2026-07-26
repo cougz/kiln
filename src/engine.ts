@@ -7,7 +7,12 @@ import { Container } from "@cloudflare/containers";
  */
 export class KilnEngine extends Container {
   defaultPort = 8000;
+  enableInternet = false;
   // Builds take minutes; keep the instance warm between agent tool calls,
   // then scale to zero.
   sleepAfter = "10m";
+}
+
+export function buildContainerName(buildId: string): string {
+  return `build-${buildId}`;
 }

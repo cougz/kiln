@@ -1,7 +1,7 @@
 # kiln-engine — geometry execution container.
 # P1: full stack — cadquery/OCCT (B-rep), trimesh+manifold3d (mesh ops),
 # matplotlib (isometric previews). OCP wheels need libGL at import time.
-FROM python:3.12-slim
+FROM python:3.12.13-slim
 
 # fontconfig + DejaVu: OCCT's font manager needs at least one system font
 # or cadquery's .text() dies with an opaque AttributeError (see PLAN.md).
@@ -23,5 +23,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY server.py checks.py runner.py render.py .
 
+RUN groupadd --system kiln \
+ && useradd --system --gid kiln --create-home --home-dir /home/kiln kiln \
+ && mkdir /builds \
+ && chown kiln:kiln /builds
+
 EXPOSE 8000
+USER kiln
 CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]

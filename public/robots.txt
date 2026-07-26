@@ -1,4 +1,3 @@
-# kiln — agentic parametric CAD (public, MCP-first)
 User-agent: *
 Allow: /
 
@@ -6,9 +5,6 @@ Content-Signal: ai-train=no, search=yes, ai-input=yes
 
 Sitemap: https://kiln.timcf.workers.dev/sitemap.xml
 
-# Agent discovery surfaces:
-#   /.well-known/mcp/server-card.json  MCP server card (SEP-1649)
-#   /.well-known/api-catalog     RFC 9727 REST endpoint catalog
-#   /.well-known/agent-skills/index.json  Agent Skills index
-#   /llms.txt
-#   /projects/<slug>             Accept: text/markdown for a plain summary
+# Public interface index: https://kiln.timcf.workers.dev/llms.txt
+# REST description: https://kiln.timcf.workers.dev/.well-known/openapi.json
+# MCP metadata: https://kiln.timcf.workers.dev/server.json

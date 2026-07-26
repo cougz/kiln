@@ -10,14 +10,20 @@
 
   "assets": {
     "directory": "./public",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+
+  "triggers": {
+    "crons": ["*/10 * * * *"]
   },
 
   "containers": [
     {
       "class_name": "KilnEngine",
       "image": "./engine/Dockerfile",
-      "max_instances": 2,
+      // Two dedicated build containers plus one health/measurement utility.
+      "max_instances": 3,
       // "basic" (1 GiB) has proven sufficient for real cadquery/OCCT
       // builds (P1-P4); revisit only if a build OOMs.
       "instance_type": "basic"

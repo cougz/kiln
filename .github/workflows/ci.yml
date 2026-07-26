@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:worker
+      - run: node --check public/app.js
+      - run: node --check public/stl-viewer.js
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run check:worker
+
+  engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv pip install --system -r engine/requirements.txt
+      - run: python -m unittest discover -s engine -p 'test_*.py'
+      - run: python -m compileall -q engine
+      - run: docker build --tag kiln-engine:test engine
+
+  migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          cache: npm
+      - run: npm ci
+      - run: npx wrangler d1 migrations apply kiln --local --persist-to /tmp/kiln-d1

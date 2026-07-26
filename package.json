@@ -1,23 +1,33 @@
 {
   "name": "kiln",
-  "version": "0.0.1",
+  "version": "0.3.0",
   "private": true,
+  "type": "module",
   "description": "Agentic parametric-CAD platform on Cloudflare — Workers + Containers + R2 + D1",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "check": "tsc --noEmit",
-    "test:engine": "python3 -m unittest discover -s engine -p 'test_*.py'"
+    "typecheck": "tsc --noEmit && tsc -p test/tsconfig.json --noEmit",
+    "check:worker": "wrangler deploy --dry-run --containers-rollout=none --outdir .wrangler/dry-run",
+    "test:worker": "vitest run",
+    "test:engine": "python3 -m unittest discover -s engine -p 'test_*.py'",
+    "check": "npm run typecheck && npm run test:worker && npm run test:engine",
+    "validate": "npm run check && npm run check:worker"
+  },
+  "engines": {
+    "node": ">=22.18.0"
   },
   "dependencies": {
-    "@cloudflare/containers": "latest",
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "agents": "^0.17.3",
-    "zod": "^4.4.3"
+    "@cloudflare/containers": "0.3.7",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "agents": "0.19.0",
+    "zod": "4.4.3"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "latest",
-    "typescript": "^5.5.0",
-    "wrangler": "^4.0.0"
+    "@cloudflare/vitest-pool-workers": "0.18.8",
+    "@cloudflare/workers-types": "5.20260726.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10",
+    "wrangler": "4.114.0"
   }
 }

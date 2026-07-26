@@ -1,0 +1,47 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.cougz/kiln",
+  "title": "kiln",
+  "description": "Versioned CadQuery projects and verified cloud builds with immutable 3D-print artifacts.",
+  "version": "0.3.0",
+  "websiteUrl": "https://kiln.timcf.workers.dev/",
+  "repository": {
+    "url": "https://github.com/cougz/kiln",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://kiln.timcf.workers.dev/mcp",
+      "headers": [
+        {
+          "name": "X-Kiln-API-Key",
+          "description": "Optional for public reads; required for write and compute tools.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "discovery": {
+        "format": "MCP Registry server.json",
+        "canonical": "https://kiln.timcf.workers.dev/server.json",
+        "production_origin": "https://kiln.timcf.workers.dev"
+      },
+      "authentication": {
+        "public_reads": true,
+        "protected_operations": ["write", "compute"],
+        "accepted_headers": [
+          "Authorization: Bearer <key>",
+          "X-Kiln-API-Key: <key>"
+        ]
+      },
+      "api": {
+        "openapi": "https://kiln.timcf.workers.dev/.well-known/openapi.json",
+        "catalog": "https://kiln.timcf.workers.dev/.well-known/api-catalog"
+      }
+    }
+  }
+}
