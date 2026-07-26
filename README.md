@@ -14,6 +14,19 @@ It serves three audiences:
 
 Production: <https://kiln.timcf.workers.dev>
 
+## Release Status
+
+Version 0.3.0 is complete and deployed. Its release gate covers 15 Worker/MCP
+integration tests, 30 engine tests, TypeScript and browser script checks, the
+engine Docker image, a clean migration apply, and a Wrangler deployment dry
+run. The pinned dependency tree has no known `npm audit` vulnerabilities, and
+CI rejects moderate-or-higher production dependency advisories.
+
+Production verification includes shallow and deep health probes, authenticated
+write enforcement, MCP initialization and discovery of all 20 tools, and
+startup of the CadQuery 2.8 engine. See [the changelog](docs/CHANGELOG.md) for
+the release details.
+
 ## Important Limits
 
 A kiln `verified` build means the script completed, the configured bounded
@@ -85,8 +98,9 @@ KILN_API_KEY=replace-with-a-long-random-development-key
 
 `npm run validate` type-checks the Worker and test suite, runs 15 Worker/MCP
 integration tests and 30 engine tests, and performs a Wrangler dry run. GitHub
-Actions also checks browser script syntax, production dependencies, Python
-compilation, the engine Docker image, and a clean local migration apply.
+Actions also checks browser script syntax, moderate-or-higher production
+dependency advisories, Python compilation, the engine Docker image, and a clean
+local migration apply.
 
 ## Deployment
 
