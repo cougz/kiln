@@ -421,3 +421,10 @@ or fail result.
 available through `put_doc`/`get_doc` MCP tools and REST endpoints for
 specification, instructions, BOM, and page Markdown. Documents can refer to
 a build and are rendered read-only in the project UI.
+
+**2026-07-26: Standard build previews.** The Workflow attempts to render
+every verified STL set into deterministic `img/kiln-front.png` and
+`img/kiln-side.png` artifacts before cleaning up the engine workspace. It
+uses `asm/*.stl` when provided and falls back to `stl/*.stl`; a preview
+failure is recorded as a build note but does not invalidate geometry
+verification.

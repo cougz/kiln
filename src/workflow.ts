@@ -32,7 +32,10 @@ interface EngineReport {
   build_id: string;
   ok: boolean;
   artifacts: string[];
+  notes?: string[];
 }
+
+const PREVIEW_VIEWS = ["front", "side"];
 
 export class KilnBuildWorkflow extends WorkflowEntrypoint<Env, BuildWorkflowParams> {
   async run(event: WorkflowEvent<BuildWorkflowParams>, step: WorkflowStep) {
@@ -85,18 +88,68 @@ export class KilnBuildWorkflow extends WorkflowEntrypoint<Env, BuildWorkflowPara
           }
           const result = (await res.json()) as EngineReport;
 
-          for (const rel of result.artifacts) {
-            const file = await engine.fetch(
-              new Request(`http://engine/artifact/${result.build_id}/${rel}`),
-            );
-            if (file.ok) {
-              await this.env.ARTIFACTS.put(p.r2_prefix + rel, await file.arrayBuffer());
+          try {
+            for (const rel of result.artifacts) {
+              const file = await engine.fetch(
+                new Request(`http://engine/artifact/${result.build_id}/${rel}`),
+              );
+              if (file.ok) {
+                await this.env.ARTIFACTS.put(p.r2_prefix + rel, await file.arrayBuffer());
+              }
             }
+
+            // The engine workspace only exists until cleanup below, so create
+            // standard previews here rather than leaving every build script to
+            // implement its own renderer. Assembly-coordinate meshes preserve
+            // the design orientation; old scripts without asm/ get a fallback.
+            const assemblyStls = result.artifacts.filter((path) => path.startsWith("asm/") && path.endsWith(".stl"));
+            const printStls = result.artifacts.filter((path) => path.startsWith("stl/") && path.endsWith(".stl"));
+            const paths = assemblyStls.length ? assemblyStls : printStls;
+            if (result.ok && paths.length) {
+              const missingViews = PREVIEW_VIEWS.filter((view) => !result.artifacts.includes(`img/kiln-${view}.png`));
+              if (!missingViews.length) {
+                result.notes = [...(result.notes ?? []), "build supplied standard img/kiln-*.png previews"];
+              } else {
+                if (!assemblyStls.length) {
+                  result.notes = [...(result.notes ?? []), "standard previews use print-oriented stl/ (no asm/*.stl supplied)"];
+                }
+                const generatedPaths = missingViews.map((view) => `img/kiln-${view}.png`);
+                const generatedKeys = generatedPaths.map((path) => p.r2_prefix + path);
+                try {
+                  await this.env.ARTIFACTS.delete(generatedKeys);
+                  const render = await engine.fetch(
+                    new Request("http://engine/render", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({ build_id: result.build_id, paths, views: missingViews }),
+                    }),
+                  );
+                  if (!render.ok) throw new Error(await render.text());
+                  const images = (await render.json()) as Record<string, unknown>;
+                  for (const view of missingViews) {
+                    const data = images[view];
+                    if (typeof data !== "string") throw new Error(`render response missing ${view} preview`);
+                    const path = `img/kiln-${view}.png`;
+                    await this.env.ARTIFACTS.put(p.r2_prefix + path, base64Bytes(data));
+                    result.artifacts.push(path);
+                  }
+                } catch (err) {
+                  try {
+                    await this.env.ARTIFACTS.delete(generatedKeys);
+                  } catch {}
+                  result.artifacts = result.artifacts.filter((path) => !generatedPaths.includes(path));
+                  result.notes = [...(result.notes ?? []), `preview render failed: ${err}`];
+                }
+              }
+            }
+            return result;
+          } finally {
+            // Never leave an engine workspace behind, even if R2 archival or
+            // preview generation throws and causes the Workflow step to retry.
+            try {
+              await engine.fetch(new Request(`http://engine/build/${result.build_id}`, { method: "DELETE" }));
+            } catch {}
           }
-          await engine.fetch(
-            new Request(`http://engine/build/${result.build_id}`, { method: "DELETE" }),
-          );
-          return result;
         },
       );
 
@@ -116,4 +169,11 @@ export class KilnBuildWorkflow extends WorkflowEntrypoint<Env, BuildWorkflowPara
       throw err;
     }
   }
+}
+
+function base64Bytes(value: string): Uint8Array {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }
