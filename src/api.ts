@@ -12,7 +12,9 @@ import type { Env } from "./index";
  *  POST /api/projects/:slug/builds           {entry?, timeout_s?, bed?} → 202, queued (poll :id)
  *  GET  /api/projects/:slug/builds
  *  GET  /api/projects/:slug/builds/:n
+ *  GET  /api/projects/:slug/builds/:n/artifacts
  *  GET  /api/projects/:slug/builds/:n/artifacts/<path>
+ *  POST /api/projects/:slug/builds/:n/verify  {path, axis, expected, tolerance}
  */
 
 const json = (data: unknown, status = 200) => Response.json(data, { status });
@@ -63,7 +65,23 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     }
     if (seg.length === 4) return json(await core.listBuilds(env, slug));
     if (seg.length === 5) return json(await core.getBuild(env, slug, seg[4]));
+    if (seg[5] === "verify" && req.method === "POST") {
+      const b = await req.json<{ path?: string; axis?: "x" | "y" | "z"; expected?: number; tolerance?: number }>();
+      if (
+        !b.path ||
+        !b.axis ||
+        !["x", "y", "z"].includes(b.axis) ||
+        b.expected === undefined ||
+        b.tolerance === undefined
+      ) {
+        throw new ApiError(400, "path, axis, expected, and tolerance required");
+      }
+      return json(await core.verifyTarget(env, slug, seg[4], b.path, b.axis, b.expected, b.tolerance));
+    }
     if (seg[5] === "artifacts") {
+      if (seg.length === 6) {
+        return json(await core.listArtifacts(env, slug, seg[4], url.searchParams.get("cursor") ?? undefined));
+      }
       const path = seg.slice(6).join("/");
       const obj = await core.getArtifact(env, slug, seg[4], path);
       return new Response(obj.body, { headers: { "content-type": contentType(path) } });

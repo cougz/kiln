@@ -157,6 +157,19 @@ export class KilnMcp extends McpAgent<Env, unknown, McpProps> {
     );
 
     s.tool(
+      "list_artifacts",
+      "List the archived artifacts for a build. Use this as the authoritative inventory before downloading an artifact.",
+      { slug: z.string(), build_id: z.string(), cursor: z.string().optional() },
+      async ({ slug, build_id, cursor }) => {
+        try {
+          return text(await core.listArtifacts(env, slug, build_id, cursor));
+        } catch (e) {
+          return fail(e);
+        }
+      },
+    );
+
+    s.tool(
       "get_artifact_url",
       "Download URL for one build artifact (STL, render PNG, doc).",
       { slug: z.string(), build_id: z.string(), path: z.string() },
@@ -168,6 +181,26 @@ export class KilnMcp extends McpAgent<Env, unknown, McpProps> {
           return text({
             url: `${origin}/api/projects/${encodeURIComponent(slug)}/builds/${encodeURIComponent(build_id)}/artifacts/${enc}`,
           });
+        } catch (e) {
+          return fail(e);
+        }
+      },
+    );
+
+    s.tool(
+      "verify_target",
+      "Independently measure one STL extent and verify it against a target within a tolerance. Returns passed=false rather than treating a dimension miss as a transport failure.",
+      {
+        slug: z.string(),
+        build_id: z.string(),
+        path: z.string(),
+        axis: z.enum(["x", "y", "z"]),
+        expected: z.number(),
+        tolerance: z.number().min(0),
+      },
+      async ({ slug, build_id, path, axis, expected, tolerance }) => {
+        try {
+          return text(await core.verifyTarget(env, slug, build_id, path, axis, expected, tolerance));
         } catch (e) {
           return fail(e);
         }

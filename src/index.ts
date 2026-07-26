@@ -255,6 +255,27 @@ function openApi(origin: string) {
           responses: { "200": { description: "Artifact" } },
         },
       },
+      "/api/projects/{slug}/builds/{buildId}/artifacts": {
+        get: {
+          summary: "List archived build artifacts",
+          parameters: [
+            { name: "slug", in: "path", required: true, schema: { type: "string" } },
+            { name: "buildId", in: "path", required: true, schema: { type: "string" } },
+            { name: "cursor", in: "query", schema: { type: "string" } },
+          ],
+          responses: { "200": { description: "Artifact inventory" } },
+        },
+      },
+      "/api/projects/{slug}/builds/{buildId}/verify": {
+        post: {
+          summary: "Verify one STL extent against a target",
+          parameters: [
+            { name: "slug", in: "path", required: true, schema: { type: "string" } },
+            { name: "buildId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { "200": { description: "Target verification result" } },
+        },
+      },
     },
   };
 }
@@ -268,7 +289,7 @@ function agentSkillsIndex(origin: string) {
         type: "skill-md",
         description: "Create versioned CadQuery projects and queue verified print-ready builds with kiln.",
         url: `${origin}/agent-skills/kiln-cad-builds/SKILL.md`,
-        digest: "sha256:113220b22bab88af3c2cacabf12d508ce9f1ef8c59afddf18400bc776f2cfbba",
+        digest: "sha256:680bb2cc5250d4b87a0acaea77a285c2b8ec1d8b3eba5b0fa861b715584d4d77",
       },
     ],
   };

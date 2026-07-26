@@ -172,9 +172,25 @@ export async function getBuild(env: Env, slug: string, buildId: string) {
 
 export async function getArtifact(env: Env, slug: string, buildId: string, path: string) {
   const build = await getBuild(env, slug, buildId);
+  if (!build.r2_prefix) throw new ApiError(409, "build has no artifact archive");
   const obj = await env.ARTIFACTS.get(`${build.r2_prefix}${path}`);
   if (!obj) throw new ApiError(404, `no artifact '${path}'`);
   return obj;
+}
+
+export async function listArtifacts(env: Env, slug: string, buildId: string, cursor?: string) {
+  const build = await getBuild(env, slug, buildId);
+  if (!build.r2_prefix) throw new ApiError(409, "build has no artifact archive");
+  const result = await env.ARTIFACTS.list({ prefix: build.r2_prefix, cursor });
+  return {
+    artifacts: result.objects.map((object) => ({
+      path: object.key.slice(build.r2_prefix!.length),
+      size: object.size,
+      uploaded: object.uploaded.toISOString(),
+      etag: object.etag,
+    })),
+    cursor: result.truncated ? result.cursor : undefined,
+  };
 }
 
 export async function runBuild(
@@ -245,6 +261,34 @@ export async function measureArtifact(env: Env, slug: string, buildId: string, p
   );
   if (!res.ok) throw new ApiError(502, `measure failed: ${await res.text()}`);
   return res.json();
+}
+
+export async function verifyTarget(
+  env: Env,
+  slug: string,
+  buildId: string,
+  path: string,
+  axis: "x" | "y" | "z",
+  expected: number,
+  tolerance: number,
+) {
+  if (!Number.isFinite(expected) || !Number.isFinite(tolerance) || tolerance < 0) {
+    throw new ApiError(400, "expected and non-negative tolerance must be finite numbers");
+  }
+  const measurement = (await measureArtifact(env, slug, buildId, path)) as { extents?: unknown };
+  const index = { x: 0, y: 1, z: 2 }[axis];
+  const actual = Array.isArray(measurement.extents) ? measurement.extents[index] : undefined;
+  if (typeof actual !== "number") throw new ApiError(502, "measure response missing extents");
+  const delta = Math.abs(actual - expected);
+  return {
+    axis,
+    expected,
+    tolerance,
+    actual,
+    delta,
+    passed: delta <= tolerance,
+    measurement,
+  };
 }
 
 export async function finishBuild(env: Env, buildId: string, status: string, report: unknown) {

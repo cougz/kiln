@@ -20,8 +20,8 @@ print-ready artifacts.
 2. Write source with `put_source`.
 3. Queue `run_build`; it is asynchronous and may outlive a client timeout.
 4. Poll `get_build` until it is `verified` or `failed`.
-5. Inspect the report and retrieve immutable artifacts with
-   `get_artifact_url`.
+5. Call `list_artifacts` for the authoritative archive inventory, then
+   retrieve selected immutable artifacts with `get_artifact_url`.
 
 Keep dimensions parametric, assert critical measurements, and export parts
 at the print bed origin. A verified build checks watertightness, bed fit,

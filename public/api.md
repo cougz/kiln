@@ -27,8 +27,14 @@ MCP client is available.
 - `GET /api/projects/:slug/builds` lists builds.
 - `GET /api/projects/:slug/builds/:buildId` returns status and verification
   report. Poll until the status is `verified` or `failed`.
+- `GET /api/projects/:slug/builds/:buildId/artifacts` lists the immutable
+  archived artifacts. Pass an opaque `cursor` query parameter to continue a
+  paginated result.
 - `GET /api/projects/:slug/builds/:buildId/artifacts/:path` downloads an
   immutable build artifact.
+- `POST /api/projects/:slug/builds/:buildId/verify` independently measures an
+  STL extent against a target. Send `path`, axis (`x`, `y`, or `z`),
+  `expected`, and non-negative `tolerance`; the response contains `passed`.
 
 Build source uses CadQuery/Python and is executed in a sandboxed Cloudflare
 Container. Reports include watertightness, printer-bed fit, placement, and

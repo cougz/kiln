@@ -383,9 +383,8 @@ starts as a fresh decision, not a carried-over backlog item.
   be SIGTERM'd (exit −15, empty log) — rerun it.
 - Still open after this session: WebMCP, Content Signals, DNS-AID,
   Web Bot Auth (P4 remainder); copilot, x402, multi-user, three.js
-  viewer (P5); the §5 doc/publish toolset (`set_params`,
-  `verify_target`, `render_views`, `list_artifacts`, `put_doc`,
-   `publish`) and an OpenAPI document remain unimplemented.
+  viewer (P5); the §5 doc/publish toolset (`set_params`, `render_views`,
+  `put_doc`, `publish`) remains unimplemented.
 
 **2026-07-26: Agent discovery standards pass.**
 
@@ -409,3 +408,11 @@ starts as a fresh decision, not a carried-over backlog item.
   enable DNSSEC at the registrar/zone. OAuth/OIDC discovery and `auth.md`
   intentionally remain absent because every API is public; add them only with
   a real Worker-side OAuth provider and protected routes.
+
+**2026-07-26: Artifact inventory and target verification.** `list_artifacts` is exposed
+through MCP and `GET /api/projects/:slug/builds/:id/artifacts`, using R2 as
+the authoritative archive inventory with cursor pagination. This closes the
+gap where an agent had to rely on an engine report before fetching artifacts.
+`verify_target` now re-measures an STL axis (`x`, `y`, or `z`) against an
+expected value and tolerance through MCP or REST, returning an explicit pass
+or fail result.
