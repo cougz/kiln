@@ -15,6 +15,8 @@
   controls.
 - Added restrictive response security headers and safer browser handling for
   artifact URLs and Markdown.
+- Overrode the MCP SDK's unused Node adapter dependency to patched
+  `@hono/node-server` 2.0.12 and made CI reject moderate production advisories.
 
 ### Builds
 

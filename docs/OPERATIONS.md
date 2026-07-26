@@ -25,9 +25,9 @@ npm run validate
 
 `npm run validate` runs TypeScript checking, 15 Worker/MCP integration tests,
 30 Python engine tests, and a Wrangler dry run with no container rollout. The
-CI workflow adds JavaScript syntax checks, a high-severity production dependency
-audit, Python compilation, an engine image build, and migration testing from a
-clean local D1 database.
+CI workflow adds JavaScript syntax checks, a moderate-severity production
+dependency audit, Python compilation, an engine image build, and migration
+testing from a clean local D1 database.
 
 ## Provisioning
 

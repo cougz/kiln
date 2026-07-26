@@ -22,7 +22,7 @@ jobs:
       - run: npm run test:worker
       - run: node --check public/app.js
       - run: node --check public/stl-viewer.js
-      - run: npm audit --omit=dev --audit-level=high
+      - run: npm audit --omit=dev --audit-level=moderate
       - run: npm run check:worker
 
   engine:
