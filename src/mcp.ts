@@ -1,7 +1,9 @@
+// Keep Zod first: MCP's protocol schemas call z.custom() during module
+// evaluation, so Wrangler's bundle must initialize Zod before the SDK.
+import { z } from "zod";
 import { McpAgent } from "agents/mcp";
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ResourceLink } from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
 import * as core from "./core";
 import { ApiError } from "./core";
 import type { Env } from "./index";

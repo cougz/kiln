@@ -1,5 +1,4 @@
 import { getContainer } from "@cloudflare/containers";
-import { SUPPORTED_PROTOCOL_VERSIONS } from "@modelcontextprotocol/sdk/types.js";
 import { KilnEngine } from "./engine";
 import { KilnMcp, MCP_TOOL_PERMISSIONS, type McpProps } from "./mcp";
 import { KilnBuildWorkflow } from "./workflow";
@@ -21,6 +20,7 @@ export interface Env {
 }
 
 const PHASE = "P4";
+const SUPPORTED_MCP_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"];
 const PRODUCTION_ORIGIN = "https://kiln.timcf.workers.dev";
 const SERVER_SCHEMA = "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json";
 const MCP_ALLOWED_HEADERS = [
@@ -198,10 +198,10 @@ async function handleMcp(
   }
 
   const protocolVersion = req.headers.get("MCP-Protocol-Version");
-  if (protocolVersion !== null && !SUPPORTED_PROTOCOL_VERSIONS.includes(protocolVersion)) {
+  if (protocolVersion !== null && !SUPPORTED_MCP_PROTOCOL_VERSIONS.includes(protocolVersion)) {
     return withMcpCors(
       mcpError(400, -32600, "Unsupported MCP-Protocol-Version", {
-        supported: SUPPORTED_PROTOCOL_VERSIONS,
+        supported: SUPPORTED_MCP_PROTOCOL_VERSIONS,
       }),
       browserOrigin,
     );
