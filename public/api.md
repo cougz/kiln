@@ -19,6 +19,11 @@ MCP client is available.
 - `PUT /api/projects/:slug/source` writes a versioned source with `path` and
   `content`.
 - `GET /api/projects/:slug/source/:path` reads the latest source version.
+- `GET /api/projects/:slug/docs` lists project documents.
+- `GET /api/projects/:slug/docs/:kind` retrieves a document. Supported kinds
+  are `specification`, `instructions`, `bom`, and `page`.
+- `PUT /api/projects/:slug/docs/:kind` creates or updates Markdown with
+  `markdown` and an optional associated `build_id`.
 
 ## Builds
 

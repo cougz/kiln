@@ -416,3 +416,8 @@ gap where an agent had to rely on an engine report before fetching artifacts.
 `verify_target` now re-measures an STL axis (`x`, `y`, or `z`) against an
 expected value and tolerance through MCP or REST, returning an explicit pass
 or fail result.
+
+**2026-07-26: Authored project documents.** The existing `doc` table is now
+available through `put_doc`/`get_doc` MCP tools and REST endpoints for
+specification, instructions, BOM, and page Markdown. Documents can refer to
+a build and are rendered read-only in the project UI.

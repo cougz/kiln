@@ -28,12 +28,15 @@ export interface QueuedBuild {
 const MAX_SOURCE_BYTES = 500_000; // per file; sources are CAD scripts, not assets
 const MAX_PATH_LEN = 160;
 const MAX_ACTIVE_BUILDS = 3; // queued+running per project
+const MAX_DOC_BYTES = 250_000;
+const DOC_KINDS = ["specification", "instructions", "bom", "page"] as const;
+type DocKind = (typeof DOC_KINDS)[number];
 
 // D1's datetime('now') stores "YYYY-MM-DD HH:MM:SS" in UTC with no zone
 // marker; clients (and the frontend) misread it as local time. Make it
 // explicit ISO 8601 UTC before it leaves the API.
 function isoUtc<T extends Record<string, unknown>>(row: T): T {
-  for (const k of ["created_at", "finished_at"]) {
+  for (const k of ["created_at", "finished_at", "updated_at"]) {
     const v = row[k];
     if (typeof v === "string" && v.includes(" ")) {
       (row as Record<string, unknown>)[k] = v.replace(" ", "T") + "Z";
@@ -93,7 +96,72 @@ export async function getProjectDetail(env: Env, slug: string) {
   )
     .bind(project.id)
     .all();
-  return { ...project, sources: sources.results, recent_builds: builds.results.map(isoUtc) };
+  const docs = await env.DB.prepare(
+    "SELECT kind, build_id, updated_at FROM doc WHERE project_id = ? ORDER BY kind",
+  )
+    .bind(project.id)
+    .all();
+  return {
+    ...project,
+    sources: sources.results,
+    recent_builds: builds.results.map(isoUtc),
+    docs: docs.results.map(isoUtc),
+  };
+}
+
+function requireDocKind(kind: string): asserts kind is DocKind {
+  if (!(DOC_KINDS as readonly string[]).includes(kind)) {
+    throw new ApiError(400, `unknown doc kind '${kind}'; use ${DOC_KINDS.join(", ")}`);
+  }
+}
+
+export async function listDocs(env: Env, slug: string) {
+  const project = await getProject(env, slug);
+  const docs = await env.DB.prepare(
+    "SELECT kind, build_id, updated_at FROM doc WHERE project_id = ? ORDER BY kind",
+  )
+    .bind(project.id)
+    .all();
+  return docs.results.map(isoUtc);
+}
+
+export async function getDoc(env: Env, slug: string, kind: string) {
+  requireDocKind(kind);
+  const project = await getProject(env, slug);
+  const doc = await env.DB.prepare(
+    "SELECT kind, build_id, markdown, updated_at FROM doc WHERE project_id = ? AND kind = ?",
+  )
+    .bind(project.id, kind)
+    .first();
+  if (!doc) throw new ApiError(404, `no ${kind} document for '${slug}'`);
+  return isoUtc(doc);
+}
+
+export async function putDoc(
+  env: Env,
+  slug: string,
+  kind: string,
+  markdown: string,
+  buildId?: string,
+) {
+  requireDocKind(kind);
+  if (new TextEncoder().encode(markdown).byteLength > MAX_DOC_BYTES) {
+    throw new ApiError(400, `document too large (max ${MAX_DOC_BYTES} bytes)`);
+  }
+  const project = await getProject(env, slug);
+  if (buildId) await getBuild(env, slug, buildId);
+  await env.DB.prepare(
+    `INSERT INTO doc (project_id, kind, build_id, markdown, html)
+     VALUES (?, ?, ?, ?, NULL)
+     ON CONFLICT(project_id, kind) DO UPDATE SET
+       build_id = excluded.build_id,
+       markdown = excluded.markdown,
+       html = NULL,
+       updated_at = datetime('now')`,
+  )
+    .bind(project.id, kind, buildId ?? null, markdown)
+    .run();
+  return getDoc(env, slug, kind);
 }
 
 export async function putSource(env: Env, slug: string, path: string, content: string) {
@@ -259,7 +327,10 @@ export async function measureArtifact(env: Env, slug: string, buildId: string, p
   const res = await engine.fetch(
     new Request("http://engine/measure", { method: "POST", body: await obj.arrayBuffer() }),
   );
-  if (!res.ok) throw new ApiError(502, `measure failed: ${await res.text()}`);
+  if (!res.ok) {
+    const detail = `measure failed: ${await res.text()}`;
+    throw new ApiError(res.status < 500 ? 422 : 502, detail);
+  }
   return res.json();
 }
 
@@ -274,6 +345,9 @@ export async function verifyTarget(
 ) {
   if (!Number.isFinite(expected) || !Number.isFinite(tolerance) || tolerance < 0) {
     throw new ApiError(400, "expected and non-negative tolerance must be finite numbers");
+  }
+  if (!path.startsWith("stl/") || !path.endsWith(".stl")) {
+    throw new ApiError(400, "verify_target requires a print-oriented stl/*.stl artifact");
   }
   const measurement = (await measureArtifact(env, slug, buildId, path)) as { extents?: unknown };
   const index = { x: 0, y: 1, z: 2 }[axis];

@@ -9,6 +9,9 @@ import type { Env } from "./index";
  *  GET  /api/projects/:slug
  *  PUT  /api/projects/:slug/source           {path, content}
  *  GET  /api/projects/:slug/source/:path     latest version
+ *  GET  /api/projects/:slug/docs
+ *  GET  /api/projects/:slug/docs/:kind
+ *  PUT  /api/projects/:slug/docs/:kind        {markdown, build_id?}
  *  POST /api/projects/:slug/builds           {entry?, timeout_s?, bed?} → 202, queued (poll :id)
  *  GET  /api/projects/:slug/builds
  *  GET  /api/projects/:slug/builds/:n
@@ -55,6 +58,25 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     return json(await core.getSource(env, slug, path));
   }
 
+  if (seg[3] === "docs") {
+    if (seg.length === 4 && req.method === "GET") return json(await core.listDocs(env, slug));
+    if (seg.length !== 5) throw new ApiError(404, "not found");
+    const kind = seg[4];
+    if (req.method === "PUT") {
+      const body: unknown = await req.json().catch(() => null);
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        throw new ApiError(400, "JSON object required");
+      }
+      const { markdown, build_id } = body as { markdown?: unknown; build_id?: unknown };
+      if (typeof markdown !== "string" || (build_id !== undefined && typeof build_id !== "string")) {
+        throw new ApiError(400, "markdown string and optional build_id string required");
+      }
+      return json(await core.putDoc(env, slug, kind, markdown, build_id));
+    }
+    if (req.method === "GET") return json(await core.getDoc(env, slug, kind));
+    throw new ApiError(405, "method not allowed");
+  }
+
   if (seg[3] === "builds") {
     if (seg.length === 4 && req.method === "POST") {
       const b = await req
@@ -82,13 +104,21 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       if (seg.length === 6) {
         return json(await core.listArtifacts(env, slug, seg[4], url.searchParams.get("cursor") ?? undefined));
       }
-      const path = seg.slice(6).join("/");
+      const path = decodePath(seg.slice(6));
       const obj = await core.getArtifact(env, slug, seg[4], path);
       return new Response(obj.body, { headers: { "content-type": contentType(path) } });
     }
   }
 
   throw new ApiError(404, "not found");
+}
+
+function decodePath(segments: string[]): string {
+  try {
+    return segments.map(decodeURIComponent).join("/");
+  } catch {
+    throw new ApiError(400, "malformed artifact path");
+  }
 }
 
 function contentType(key: string): string {

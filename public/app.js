@@ -308,6 +308,10 @@ async function routeProject(slug) {
     const sources = p.sources.map((s) =>
       `<li><code>${esc(s.path)}</code> <span class="slug">v${s.version}</span></li>`
     ).join("") || `<li class="empty">no sources</li>`;
+    const docs = (p.docs || []).map((d) =>
+      `<li><a href="#/p/${encodeURIComponent(slug)}/d/${encodeURIComponent(d.kind)}">${esc(d.kind)}</a>` +
+      `${d.build_id ? ` <span class="slug">build ${esc(d.build_id)}</span>` : ""}</li>`
+    ).join("") || `<li class="empty">no authored documents</li>`;
 
     const builds = p.recent_builds.length ? `
       <table>
@@ -333,6 +337,30 @@ async function routeProject(slug) {
         <h3>Builds</h3>
         ${builds}
       </div>
+      <div class="k-card">
+        <h3>Documents</h3>
+        <ul class="artifact-list">${docs}</ul>
+      </div>
+    `;
+  } catch (err) {
+    $d.innerHTML = `<p class="error">${esc(err.message)}</p>`;
+  }
+}
+
+async function routeDoc(slug, kind) {
+  $app.innerHTML = `
+    <div class="crumbs">
+      <a href="#/">projects</a> / <a href="#/p/${encodeURIComponent(slug)}">${esc(slug)}</a> / ${esc(kind)}
+    </div>
+    <div id="detail">Loading…</div>
+  `;
+  const $d = document.getElementById("detail");
+  try {
+    const doc = await api(`/projects/${encodeURIComponent(slug)}/docs/${encodeURIComponent(kind)}`);
+    $d.innerHTML = `
+      <h1 class="page-title">${esc(doc.kind)}</h1>
+      <div class="slug">${doc.build_id ? `build ${esc(doc.build_id)} · ` : ""}updated ${esc(fmtDate(doc.updated_at))}</div>
+      <div class="k-card doc"><div class="doc-body">${mdToHtml(doc.markdown)}</div></div>
     `;
   } catch (err) {
     $d.innerHTML = `<p class="error">${esc(err.message)}</p>`;
@@ -419,6 +447,8 @@ function route() {
   const parts = hash.split("/").filter(Boolean);
   if (parts[0] === "p" && parts[1] && parts[2] === "b" && parts[3]) {
     routeBuild(decodeURIComponent(parts[1]), decodeURIComponent(parts[3]));
+  } else if (parts[0] === "p" && parts[1] && parts[2] === "d" && parts[3]) {
+    routeDoc(decodeURIComponent(parts[1]), decodeURIComponent(parts[3]));
   } else if (parts[0] === "p" && parts[1]) {
     routeProject(decodeURIComponent(parts[1]));
   } else {

@@ -222,6 +222,31 @@ function openApi(origin: string) {
           responses: { "200": { description: "Source" } },
         },
       },
+      "/api/projects/{slug}/docs": {
+        get: {
+          summary: "List project documents",
+          parameters: [{ name: "slug", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "Document summaries" } },
+        },
+      },
+      "/api/projects/{slug}/docs/{kind}": {
+        get: {
+          summary: "Get a project document",
+          parameters: [
+            { name: "slug", in: "path", required: true, schema: { type: "string" } },
+            { name: "kind", in: "path", required: true, schema: { enum: ["specification", "instructions", "bom", "page"] } },
+          ],
+          responses: { "200": { description: "Document" } },
+        },
+        put: {
+          summary: "Create or update a project document",
+          parameters: [
+            { name: "slug", in: "path", required: true, schema: { type: "string" } },
+            { name: "kind", in: "path", required: true, schema: { enum: ["specification", "instructions", "bom", "page"] } },
+          ],
+          responses: { "200": { description: "Stored document" } },
+        },
+      },
       "/api/projects/{slug}/builds": {
         get: {
           summary: "List builds",
@@ -289,7 +314,7 @@ function agentSkillsIndex(origin: string) {
         type: "skill-md",
         description: "Create versioned CadQuery projects and queue verified print-ready builds with kiln.",
         url: `${origin}/agent-skills/kiln-cad-builds/SKILL.md`,
-        digest: "sha256:680bb2cc5250d4b87a0acaea77a285c2b8ec1d8b3eba5b0fa861b715584d4d77",
+        digest: "sha256:4b033ce629aba78315a3629bccbf42d3a8349bb37911910e1cc9ff930c588eef",
       },
     ],
   };

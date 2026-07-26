@@ -121,6 +121,37 @@ export class KilnMcp extends McpAgent<Env, unknown, McpProps> {
     );
 
     s.tool(
+      "put_doc",
+      "Create or update a project specification, instructions, bill of materials, or public page document in Markdown. Optionally associate it with one build.",
+      {
+        slug: z.string(),
+        kind: z.enum(["specification", "instructions", "bom", "page"]),
+        markdown: z.string(),
+        build_id: z.string().optional(),
+      },
+      async ({ slug, kind, markdown, build_id }) => {
+        try {
+          return text(await core.putDoc(env, slug, kind, markdown, build_id));
+        } catch (e) {
+          return fail(e);
+        }
+      },
+    );
+
+    s.tool(
+      "get_doc",
+      "Read one project specification, instructions, bill of materials, or page document.",
+      { slug: z.string(), kind: z.enum(["specification", "instructions", "bom", "page"]) },
+      async ({ slug, kind }) => {
+        try {
+          return text(await core.getDoc(env, slug, kind));
+        } catch (e) {
+          return fail(e);
+        }
+      },
+    );
+
+    s.tool(
       "run_build",
       "Queue the project's build script on the CAD engine (cadquery 2.8 + trimesh " +
         "+ manifold3d + matplotlib). Returns immediately with status 'queued'; the " +

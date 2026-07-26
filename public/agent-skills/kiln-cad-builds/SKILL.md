@@ -22,6 +22,8 @@ print-ready artifacts.
 4. Poll `get_build` until it is `verified` or `failed`.
 5. Call `list_artifacts` for the authoritative archive inventory, then
    retrieve selected immutable artifacts with `get_artifact_url`.
+6. Write build-associated `specification`, `instructions`, or `bom` Markdown
+   with `put_doc` when the part is ready to hand off.
 
 Keep dimensions parametric, assert critical measurements, and export parts
 at the print bed origin. A verified build checks watertightness, bed fit,
