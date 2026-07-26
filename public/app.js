@@ -6,6 +6,80 @@
 const $app = document.getElementById("app");
 const $status = document.getElementById("status");
 
+let serviceStatus = { state: "checking", health: null, checkedAt: null };
+let serviceRequest = 0;
+
+function statusLabel() {
+  if (serviceStatus.state === "operational") return "Operational";
+  if (serviceStatus.state === "degraded") return "Degraded";
+  if (serviceStatus.state === "offline") return "Unavailable";
+  return "Checking";
+}
+
+function renderServiceStatus() {
+  const { state, health, checkedAt } = serviceStatus;
+  $status.className = `status status--${state}`;
+  $status.innerHTML = `<span class="status-dot" aria-hidden="true"></span>${esc(statusLabel())}`;
+  $status.title = "Open service status";
+
+  const panel = $app.querySelector("[data-service-status]");
+  if (!panel) return;
+  const dependencies = health
+    ? [
+        ["D1 metadata", health.d1],
+        ["R2 archive", health.r2],
+        ["MCP gateway", health.mcp],
+      ]
+    : [["Service check", null]];
+  const message = state === "operational"
+    ? "Build metadata, immutable artifacts, and MCP are ready."
+    : state === "degraded"
+      ? "Some dependencies are unavailable. New builds or artifact retrieval may fail."
+      : state === "offline"
+        ? "The API could not be reached. Existing pages may show cached information."
+        : "Verifying the Worker and its storage bindings.";
+  panel.className = `service-status service-status--${state}`;
+  panel.innerHTML = `
+    <div class="service-status__heading">
+      <div>
+        <div class="eyebrow">// SERVICE STATUS</div>
+        <h2>${esc(statusLabel())}</h2>
+      </div>
+      <button class="k-btn k-btn--ghost k-btn--sm" type="button" data-refresh-status>Refresh</button>
+    </div>
+    <p>${esc(message)}</p>
+    <div class="service-status__meta">
+      ${dependencies.map(([name, ok]) => `
+        <span class="service-check ${ok === true ? "is-up" : ok === false ? "is-down" : "is-checking"}">
+          <span aria-hidden="true"></span>${esc(name)}: ${ok === true ? "ready" : ok === false ? "unavailable" : "checking"}
+        </span>
+      `).join("")}
+    </div>
+    <div class="service-status__foot">${health?.phase ? `phase ${esc(health.phase)} · ` : ""}${checkedAt ? `checked ${esc(fmtDate(checkedAt))}` : "awaiting response"}</div>
+  `;
+}
+
+async function refreshServiceStatus() {
+  const request = ++serviceRequest;
+  serviceStatus = { ...serviceStatus, state: "checking" };
+  renderServiceStatus();
+  try {
+    const response = await fetch("/api/health", { cache: "no-store" });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    const health = await response.json();
+    if (request !== serviceRequest) return;
+    serviceStatus = {
+      state: health.ok ? "operational" : "degraded",
+      health,
+      checkedAt: new Date().toISOString(),
+    };
+  } catch {
+    if (request !== serviceRequest) return;
+    serviceStatus = { state: "offline", health: null, checkedAt: new Date().toISOString() };
+  }
+  renderServiceStatus();
+}
+
 // WebMCP is a progressive enhancement. These read-only tools mirror the
 // public gallery without granting a browser agent additional write access.
 if (document.modelContext?.registerTool) {
@@ -227,6 +301,11 @@ function mdToHtml(md) {
 // Delegated clicks: lightbox thumbnails and row links (no inline handlers —
 // artifact names and ids never end up inside executable attributes).
 $app.addEventListener("click", (e) => {
+  const refresh = e.target.closest("[data-refresh-status]");
+  if (refresh) {
+    refreshServiceStatus();
+    return;
+  }
   const img = e.target.closest("img[data-lightbox]");
   if (img) {
     openLightbox(img.src, img.alt);
@@ -251,6 +330,7 @@ async function routeGallery() {
         <a class="k-btn k-btn--ghost" href="https://github.com/cougz/kiln">View source</a>
       </div>
     </section>
+    <section class="service-status service-status--checking" data-service-status></section>
     <form class="create-project" id="create-form">
       <input name="slug" placeholder="slug (lowercase-dashes)" required pattern="[a-z0-9][a-z0-9-]{1,63}">
       <input name="name" placeholder="name (optional)">
@@ -459,6 +539,15 @@ function route() {
 window.addEventListener("hashchange", route);
 route();
 
-fetch("/api/health").then((r) => r.json()).then((h) => {
-  $status.textContent = `phase ${h.phase} · d1 ${h.d1 ? "ok" : "down"} · r2 ${h.r2 ? "ok" : "down"} · mcp ${h.mcp ? "open" : "off"}`;
-}).catch(() => { $status.textContent = "api unreachable"; });
+$status.addEventListener("click", () => {
+  if (!location.hash || location.hash === "#/") {
+    $app.querySelector("[data-service-status]")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  } else {
+    location.hash = "#/";
+  }
+});
+setInterval(refreshServiceStatus, 30_000);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") refreshServiceStatus();
+});
+refreshServiceStatus();
