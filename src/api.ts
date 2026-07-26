@@ -9,6 +9,7 @@ import type { Env } from "./index";
  *  GET  /api/projects/:slug
  *  PUT  /api/projects/:slug/source           {path, content}
  *  GET  /api/projects/:slug/source/:path     latest version
+ *  GET/PUT /api/projects/:slug/params         {params}
  *  GET  /api/projects/:slug/docs
  *  GET  /api/projects/:slug/docs/:kind
  *  PUT  /api/projects/:slug/docs/:kind        {markdown, build_id?}
@@ -56,6 +57,18 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     }
     const path = seg.slice(4).join("/");
     return json(await core.getSource(env, slug, path));
+  }
+
+  if (seg[3] === "params" && seg.length === 4) {
+    if (req.method === "GET") return json(await core.getParams(env, slug));
+    if (req.method === "PUT") {
+      const body: unknown = await req.json().catch(() => null);
+      if (!body || typeof body !== "object" || Array.isArray(body) || !("params" in body)) {
+        throw new ApiError(400, "JSON object with params required");
+      }
+      return json(await core.setParams(env, slug, (body as { params: unknown }).params));
+    }
+    throw new ApiError(405, "method not allowed");
   }
 
   if (seg[3] === "docs") {

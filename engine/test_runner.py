@@ -28,6 +28,19 @@ print("built ok")
 
 FAILING_SCRIPT = "raise SystemExit('assertion failed: dimension off target')\n"
 
+PARAMETERIZED_SCRIPT = """\
+import json
+import os
+import trimesh
+
+with open("params.json") as f:
+    size = json.load(f)["size"]
+os.makedirs("stl", exist_ok=True)
+m = trimesh.creation.box(extents=[size, size, size])
+m.apply_translation([0, 0, size / 2])
+m.export("stl/parameterized.stl")
+"""
+
 
 class TestRunBuild(unittest.TestCase):
     def setUp(self):
@@ -61,6 +74,16 @@ class TestRunBuild(unittest.TestCase):
         self.assertNotEqual(r["exit_code"], 0)
         self.assertFalse(r["ok"])
         self.assertIn("assertion failed", r["log"])
+
+    def test_build_script_receives_params_json(self):
+        r = runner.run_build(
+            {"build.py": PARAMETERIZED_SCRIPT, "params.json": '{"size": 12}'},
+            "build.py",
+            60,
+            180.0,
+        )
+        self.assertTrue(r["ok"])
+        self.assertEqual(r["stl_reports"]["stl/parameterized.stl"]["extents"], [12.0, 12.0, 12.0])
 
     def test_no_stl_output_is_not_verified(self):
         r = runner.run_build({"build.py": "print('nothing exported')"}, "build.py", 60, 180.0)

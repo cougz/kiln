@@ -19,6 +19,9 @@ MCP client is available.
 - `PUT /api/projects/:slug/source` writes a versioned source with `path` and
   `content`.
 - `GET /api/projects/:slug/source/:path` reads the latest source version.
+- `GET /api/projects/:slug/params` reads the current versioned parameter
+  object. `PUT` accepts `{ "params": { ... } }`; builds receive it as
+  `params.json` and retain it in their build record.
 - `GET /api/projects/:slug/docs` lists project documents.
 - `GET /api/projects/:slug/docs/:kind` retrieves a document. Supported kinds
   are `specification`, `instructions`, `bom`, and `page`.

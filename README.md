@@ -12,7 +12,7 @@ Roadmap and architecture: [docs/PLAN.md](docs/PLAN.md).
 - ✅ **P1** — CAD engine (cadquery 2.8/OCCT + trimesh + manifold3d +
   matplotlib), REST API for projects / versioned sources / builds, R2
   artifact archive, D1 metadata
-- ✅ **P2** — MCP server (`/mcp`, 13 tools, server card at
+- ✅ **P2** — MCP server (`/mcp`, 15 tools, server card at
   `/.well-known/mcp.json`). **Public, no auth.** Cloudflare Access
   managed OAuth was fully implemented and server-side verified, but
   every client-side connection path dead-ended (see `docs/PLAN.md` §7)

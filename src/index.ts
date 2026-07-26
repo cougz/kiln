@@ -222,6 +222,30 @@ function openApi(origin: string) {
           responses: { "200": { description: "Source" } },
         },
       },
+      "/api/projects/{slug}/params": {
+        get: {
+          summary: "Get current versioned build parameters",
+          parameters: [{ name: "slug", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "Parameters and source version" } },
+        },
+        put: {
+          summary: "Set versioned build parameters",
+          parameters: [{ name: "slug", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["params"],
+                  properties: { params: { type: "object", additionalProperties: true } },
+                },
+              },
+            },
+          },
+          responses: { "200": { description: "Stored parameters and source version" } },
+        },
+      },
       "/api/projects/{slug}/docs": {
         get: {
           summary: "List project documents",
@@ -314,7 +338,7 @@ function agentSkillsIndex(origin: string) {
         type: "skill-md",
         description: "Create versioned CadQuery projects and queue verified print-ready builds with kiln.",
         url: `${origin}/agent-skills/kiln-cad-builds/SKILL.md`,
-        digest: "sha256:4b033ce629aba78315a3629bccbf42d3a8349bb37911910e1cc9ff930c588eef",
+        digest: "sha256:eea64a249331929eb52a54bcde6777ee0786d1e10f3c6c195625d5119b0f58f6",
       },
     ],
   };

@@ -428,3 +428,9 @@ every verified STL set into deterministic `img/kiln-front.png` and
 uses `asm/*.stl` when provided and falls back to `stl/*.stl`; a preview
 failure is recorded as a build note but does not invalidate geometry
 verification.
+
+**2026-07-26: Versioned build parameters.** `set_params`/`get_params` now
+manage a JSON object as the versioned `params.json` source. The runner places
+that file in the build workspace, and every queued build stores the exact
+parameter object in `build.params_json` for reproducibility. This avoids a
+schema migration while leaving parameters co-versioned with CAD source.

@@ -29,6 +29,8 @@ const MAX_SOURCE_BYTES = 500_000; // per file; sources are CAD scripts, not asse
 const MAX_PATH_LEN = 160;
 const MAX_ACTIVE_BUILDS = 3; // queued+running per project
 const MAX_DOC_BYTES = 250_000;
+const MAX_PARAMS_BYTES = 50_000;
+export const PARAMS_PATH = "params.json";
 const DOC_KINDS = ["specification", "instructions", "bom", "page"] as const;
 type DocKind = (typeof DOC_KINDS)[number];
 
@@ -205,6 +207,42 @@ export async function getSource(env: Env, slug: string, path: string) {
   return row;
 }
 
+function normalizeParams(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ApiError(400, "params must be a JSON object");
+  }
+  return value as Record<string, unknown>;
+}
+
+function parseParams(content: string): Record<string, unknown> {
+  try {
+    return normalizeParams(JSON.parse(content));
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    throw new ApiError(409, "stored params.json is not a JSON object; update it with set_params");
+  }
+}
+
+export async function getParams(env: Env, slug: string) {
+  try {
+    const source = await getSource(env, slug, PARAMS_PATH);
+    return { params: parseParams(source.content), version: source.version };
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return { params: {}, version: 0 };
+    throw err;
+  }
+}
+
+export async function setParams(env: Env, slug: string, params: unknown) {
+  const normalized = normalizeParams(params);
+  const content = JSON.stringify(normalized, null, 2) + "\n";
+  if (new TextEncoder().encode(content).byteLength > MAX_PARAMS_BYTES) {
+    throw new ApiError(400, `params too large (max ${MAX_PARAMS_BYTES} bytes)`);
+  }
+  const source = await putSource(env, slug, PARAMS_PATH, content);
+  return { params: normalized, version: source.version };
+}
+
 export async function listBuilds(env: Env, slug: string) {
   const project = await getProject(env, slug);
   const rows = await env.DB.prepare(
@@ -235,7 +273,11 @@ export async function getBuild(env: Env, slug: string, buildId: string) {
     .bind(project.id, buildId)
     .first<BuildRow>();
   if (!build) throw new ApiError(404, `no build '${buildId}'`);
-  return isoUtc({ ...build, report_json: JSON.parse(build.report_json ?? "null") as unknown });
+  return isoUtc({
+    ...build,
+    params: JSON.parse(build.params_json ?? "{}") as unknown,
+    report_json: JSON.parse(build.report_json ?? "null") as unknown,
+  });
 }
 
 export async function getArtifact(env: Env, slug: string, buildId: string, path: string) {
@@ -280,6 +322,19 @@ export async function runBuild(
   if (!sources.results.some((s) => s.path === entry)) {
     throw new ApiError(400, `entry '${entry}' is not among the project's sources`);
   }
+  const paramsSource = sources.results.find((source) => source.path === PARAMS_PATH);
+  let params: Record<string, unknown> = {};
+  let paramsContent = "{}\n";
+  if (paramsSource) {
+    const row = await env.DB.prepare(
+      "SELECT content FROM source WHERE project_id = ? AND path = ? AND version = ?",
+    )
+      .bind(project.id, PARAMS_PATH, paramsSource.v)
+      .first<{ content: string }>();
+    if (!row) throw new ApiError(409, "pinned params.json source is missing");
+    params = parseParams(row.content);
+    paramsContent = row.content;
+  }
   const active = await env.DB.prepare(
     "SELECT COUNT(*) AS n FROM build WHERE project_id = ? AND status IN ('queued','running')",
   )
@@ -296,9 +351,9 @@ export async function runBuild(
   const buildId = crypto.randomUUID().slice(0, 12);
   const r2Prefix = `projects/${project.id}/builds/${buildId}/`;
   await env.DB.prepare(
-    "INSERT INTO build (id, project_id, source_version, status, r2_prefix) VALUES (?, ?, ?, 'queued', ?)",
+    "INSERT INTO build (id, project_id, source_version, params_json, status, r2_prefix) VALUES (?, ?, ?, ?, 'queued', ?)",
   )
-    .bind(buildId, project.id, sourceVersion, r2Prefix)
+    .bind(buildId, project.id, sourceVersion, JSON.stringify(params), r2Prefix)
     .run();
 
   await env.BUILD_WORKFLOW.create({
@@ -311,6 +366,8 @@ export async function runBuild(
       bed: Math.min(Math.max(bed, 100), 1000),
       r2_prefix: r2Prefix,
       files: Object.fromEntries(sources.results.map((s) => [s.path, s.v])),
+      params,
+      params_content: paramsContent,
     },
   });
 

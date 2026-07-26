@@ -33,6 +33,8 @@ const DISCIPLINE = `kiln CAD discipline (from the parametric-cad-stl workflow):
   exactly co-planar.
 - Every printed part must fit the bed sitting at Z=0 (default 180x180x180;
   run_build accepts a per-build 'bed' override for larger printers).
+- Use set_params for dimensions and load the versioned params.json file in
+  build scripts; each queued build pins its parameters for reproducibility.
 - Export print-oriented STLs to stl/ (slicer-ready, part on bed corner),
   assembly-coordinate copies to asm/; parts that only fit diagonally get
   their 45-degree rotation baked into the stl/ export.
@@ -114,6 +116,32 @@ export class KilnMcp extends McpAgent<Env, unknown, McpProps> {
       async ({ slug, path }) => {
         try {
           return text(await core.getSource(env, slug, path));
+        } catch (e) {
+          return fail(e);
+        }
+      },
+    );
+
+    s.tool(
+      "set_params",
+      "Set the project's versioned JSON parameters. Builds receive these values as params.json in the workspace and pin them in the build record.",
+      { slug: z.string(), params: z.record(z.string(), z.unknown()) },
+      async ({ slug, params }) => {
+        try {
+          return text(await core.setParams(env, slug, params));
+        } catch (e) {
+          return fail(e);
+        }
+      },
+    );
+
+    s.tool(
+      "get_params",
+      "Read the project's current versioned JSON parameters.",
+      { slug: z.string() },
+      async ({ slug }) => {
+        try {
+          return text(await core.getParams(env, slug));
         } catch (e) {
           return fail(e);
         }

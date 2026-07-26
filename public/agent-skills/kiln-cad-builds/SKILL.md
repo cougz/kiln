@@ -17,12 +17,14 @@ print-ready artifacts.
 ## Workflow
 
 1. Create or select a project.
-2. Write source with `put_source`.
-3. Queue `run_build`; it is asynchronous and may outlive a client timeout.
-4. Poll `get_build` until it is `verified` or `failed`.
-5. Call `list_artifacts` for the authoritative archive inventory, then
+2. Set dimensions with `set_params`; build scripts read the versioned
+   `params.json` file from the workspace.
+3. Write source with `put_source`.
+4. Queue `run_build`; it is asynchronous and may outlive a client timeout.
+5. Poll `get_build` until it is `verified` or `failed`.
+6. Call `list_artifacts` for the authoritative archive inventory, then
    retrieve selected immutable artifacts with `get_artifact_url`.
-6. Write build-associated `specification`, `instructions`, or `bom` Markdown
+7. Write build-associated `specification`, `instructions`, or `bom` Markdown
    with `put_doc` when the part is ready to hand off.
 
 Keep dimensions parametric, assert critical measurements, and export parts

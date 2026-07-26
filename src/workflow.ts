@@ -1,7 +1,7 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 import { getContainer } from "@cloudflare/containers";
-import { finishBuild } from "./core";
+import { finishBuild, PARAMS_PATH } from "./core";
 import type { Env } from "./index";
 
 /** Build pipeline as a Workflow (PLAN.md §3): durable and retryable, so a
@@ -23,6 +23,10 @@ export interface BuildWorkflowParams {
   r2_prefix: string;
   /** pinned source versions: path -> version */
   files: Record<string, number>;
+  /** exact parameter object captured with the pinned source versions */
+  params: Record<string, unknown>;
+  /** exact serialized parameter source captured with the object */
+  params_content?: string;
 }
 
 // Only the fields the workflow reads; the engine's full report object
@@ -65,6 +69,12 @@ export class KilnBuildWorkflow extends WorkflowEntrypoint<Env, BuildWorkflowPara
               .first<{ content: string }>();
             if (!row) throw new NonRetryableError(`source ${path} v${version} not found`);
             files[path] = row.content;
+          }
+          // New payloads always materialize the contract, even when empty.
+          // Preserve inputs of workflows queued before the params field was
+          // introduced rather than changing their pinned source set on deploy.
+          if (Object.hasOwn(p, "params")) {
+            files[PARAMS_PATH] = p.params_content ?? JSON.stringify(p.params, null, 2) + "\n";
           }
 
           const engine = getContainer(this.env.ENGINE);

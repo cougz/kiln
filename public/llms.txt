@@ -8,10 +8,10 @@ Status: P4 — cloud CAD builds, a remote MCP server, and a project
 gallery/build-page frontend are live. Live phase: GET /api/health.
 
 ## MCP
-- POST/GET /mcp: Streamable HTTP MCP endpoint. 13 tools: list_projects,
+- POST/GET /mcp: Streamable HTTP MCP endpoint. 15 tools: list_projects,
   create_project, get_project, put_source, get_source, run_build,
   get_build, list_artifacts, get_artifact_url, verify_target, measure,
-  put_doc, get_doc. Also serves a 'cad-discipline'
+  set_params, get_params, put_doc, get_doc. Also serves a 'cad-discipline'
   prompt with kiln's CAD design rules.
 - run_build is async: it returns {build_id, status:"queued"} immediately
   and the build runs in the background (typically 1-5 min). Poll
@@ -28,6 +28,8 @@ gallery/build-page frontend are live. Live phase: GET /api/health.
 - POST /api/projects {slug, name, description?}: create project
 - GET /api/projects | /api/projects/:slug: list / detail
 - PUT /api/projects/:slug/source {path, content}: versioned CAD sources
+- GET/PUT /api/projects/:slug/params: versioned JSON parameters, available to
+  build scripts as `params.json`
 - GET /api/projects/:slug/docs | GET/PUT /api/projects/:slug/docs/:kind:
   Markdown specification, instructions, BOM, and page documents
 - POST /api/projects/:slug/builds: queue a build (202; poll builds/:id).
