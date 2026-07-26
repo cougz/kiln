@@ -30,7 +30,7 @@ in-app copilot (Workers AI / AI Gateway) without changing the core.
 | CadQuery/OpenCASCADE on Workers? | **No** — Python Workers are Pyodide; no native OCCT. Must run in **Cloudflare Containers**. |
 | Containers capable enough? | **Yes** — up to 4 vCPU / 12 GiB / 20 GB disk (custom instance types GA since 2026-01), scale-to-zero, per-request wake. The rack build needs ~1 vCPU/1 GiB for ~2 min. |
 | CI/CD on git push incl. container image? | **Yes** — Workers Builds' GitHub integration runs `wrangler deploy`, which **builds the Dockerfile and pushes to the integrated Cloudflare registry** automatically. Monorepo supported (per-Worker root dirs). |
-| Remote MCP on Workers? | **Yes** — Agents SDK `McpAgent`: Streamable HTTP + legacy SSE, OAuth 2.1, Durable Object per session, WebSocket hibernation. |
+| Remote MCP on Workers? | **Yes** — Agents SDK `McpAgent`: public Streamable HTTP, Durable Object sessions, and WebSocket hibernation. |
 | MCP Server Card | Real, ratified standard (SEP-1649, 2025-11-25): JSON at `/.well-known/mcp.json`. |
 | Kumo | `@cloudflare/kumo` on npm, MIT, React + Base UI + Phosphor icons, docs at kumo-ui.com. Public — no employee-only blockers. |
 | x402 / Monetization Gateway | Edge-enforced payment rules (dashboard/API/Terraform) on any route incl. MCP tools; stablecoin settlement; Web Bot Auth agent identity. **Deferred** (service starts private) but the architecture leaves the seam. |
@@ -42,10 +42,10 @@ GitHub repo "kiln"  ──push──▶  Workers Builds (CI/CD, builds Dockerfil
                                      │ deploys
         ┌────────────────────────────┴───────────────────────────┐
         │  Worker: kiln  (TypeScript)                             │
-        │  ├─ Frontend: React + @cloudflare/kumo (Workers Assets) │
+        │  ├─ Frontend: vanilla JS SPA (Workers Assets)            │
         │  ├─ REST API (typed, OpenAPI → /.well-known/api-catalog)│
-        │  ├─ MCP server (McpAgent, Streamable HTTP, OAuth 2.1)   │
-        │  ├─ /.well-known/mcp.json (server card) + OAuth PRM     │
+        │  ├─ MCP server (McpAgent, public Streamable HTTP)       │
+        │  ├─ server card + API catalog + Agent Skills index       │
         │  ├─ robots.txt · llms.txt · md content negotiation      │
         │  └─ Workflows: build pipeline orchestration             │
         │        │ container binding (Durable Object)             │
@@ -54,12 +54,12 @@ GitHub repo "kiln"  ──push──▶  Workers Builds (CI/CD, builds Dockerfil
         │  ├─ POST /build   run project build script, emit stl/   │
         │  ├─ POST /measure bounds/extents/watertight/sections    │
         │  ├─ POST /render  front+side isometric PNGs (asm coords)│
-        │  └─ POST /verify  bed-fit, overlap, collision, targets  │
+        │  └─ checks: watertight, bed-fit, placement, overhangs    │
         └──────────────┬───────────────────┬──────────────────────┘
                        │                   │
                  R2: artifacts        D1: metadata
-                 (stl/img/docs,       (projects, builds,
-                  immutable per-build) params, tool audit log)
+                  (stl/img/docs,       (projects, sources, builds,
+                   immutable per-build) params, authored docs)
 ```
 
 - **One Worker, one wrangler.jsonc** — the container is declared in the
@@ -89,29 +89,32 @@ GitHub repo "kiln"  ──push──▶  Workers Builds (CI/CD, builds Dockerfil
 ## 5. MCP tools (the parametric-cad-stl skill, as an API)
 
 Project: `create_project`, `list_projects`, `get_project`
-Source:  `put_source`, `get_source`, `set_params`
+Source:  `put_source`, `get_source`, `set_params`, `get_params`
 Geometry: `run_build` (async → build id), `get_build` (status+report),
-          `measure` (ad-hoc: bounds/extents/watertight on any artifact),
-          `verify_target` (assert measured value vs target ± tol)
-Artifacts: `list_artifacts`, `get_artifact_url` (signed R2 URL),
-           `render_views` (re-render specific parts/views)
-Docs/publish: `put_doc` (LLM writes SPECIFICATION/INSTRUCTIONS/BOM),
-              `publish` (make build the project's public page)
+           `measure` (ad-hoc: bounds/extents/watertight on any artifact),
+           `verify_target` (assert measured value vs target ± tol)
+Artifacts: `list_artifacts`, `get_artifact_url`; verified builds attempt
+           standard front/side previews and record render failures as notes
+Docs:      `put_doc`, `get_doc` (specification/instructions/BOM/page Markdown)
 
-MCP **prompts** ship the skill's rules (no floating parts, solve free
-dimensions, print-oriented exports, coupon-first gates) so any connecting
-agent inherits the discipline. MCP **resources** expose build reports and
-docs read-only.
+Deferred: `render_views` (on-demand rerender from archived artifacts) and
+`publish` (requires a visibility/publication model). The current MCP server
+has 15 tools.
+
+The `cad-discipline` prompt ships the skill's rules (no floating parts, solve
+free dimensions, versioned parameters, print-oriented exports, coupon-first
+gates) so any connecting agent inherits the discipline. Build reports and
+documents are currently read through tools and REST rather than MCP resources.
 
 ## 6. Agent-ready checklist → implementation
 
 | isitagentready category | kiln implementation |
 |---|---|
-| Discoverability | robots.txt (AI-bot rules + sitemap), sitemap.xml, `Link` headers, DNS-AID TXT record |
-| Content accessibility | Markdown content negotiation (`Accept: text/markdown` on every project/doc page returns the source md), llms.txt |
-| Bot access control | Cloudflare Bot Management + Web Bot Auth (employee account), Content Signals in robots.txt |
-| Protocol discovery | MCP Server Card `/.well-known/mcp.json`, OAuth discovery + Protected Resource Metadata (RFC 9728), `/.well-known/api-catalog` from the OpenAPI spec |
-| WebMCP | Frontend registers `navigator.modelContext` tools (browse projects, trigger builds) for in-browser agents — thin wrappers over the same API |
+| Discoverability | robots.txt, sitemap.xml, RFC 8288 `Link` headers, API catalog, OpenAPI, MCP Server Card, Agent Skills index |
+| Content accessibility | Markdown negotiation for the homepage and project summaries, llms.txt, Content Signals |
+| Bot access control | Public unauthenticated service; Web Bot Auth remains deferred |
+| Protocol discovery | MCP Server Card `/.well-known/mcp/server-card.json`, legacy card alias, and RFC 9727 API catalog |
+| WebMCP | Progressive read-only `document.modelContext` project tools |
 | Commerce | None at launch (private). Seam: x402 via Monetization Gateway rules on `/mcp` + artifact routes when/if opened up. |
 
 ## 7. Auth
@@ -149,8 +152,9 @@ docs read-only.
 - **P2 — MCP:** McpAgent with the §5 toolset, server card, public (no
   auth — see §7). *Exit: an agent runs a build end-to-end through the
   MCP tools alone.* ✅ done 2026-07-06.
-- **P3 — Frontend:** project gallery, build page (renders, report,
-  artifact downloads, inline docs). ✅ core done 2026-07-06 as a
+- **P3 — Frontend:** project gallery, project/build/document pages, renders,
+  report, artifact downloads, authored documents, and live service status.
+  ✅ Core functionality is delivered as a
   vanilla-JS hash-routed SPA over the REST API (no bundler — Workers
   Builds' CI only runs `npm ci` + `wrangler deploy`, so `public/` is
   served as-is). Deferred: swap in Kumo/React if/when a build step is
@@ -169,8 +173,8 @@ docs read-only.
 kiln/
 ├─ wrangler.jsonc          # worker + containers + r2 + d1 + do bindings
 ├─ package.json
-├─ src/                    # Worker: api/, mcp/, wellknown/, workflows/
-├─ web/                    # React + @cloudflare/kumo (Workers Assets)
+├─ src/                    # Worker: REST, MCP, discovery, workflows
+├─ public/                 # vanilla-JS SPA and discovery documents
 ├─ engine/                 # Container: Dockerfile, server.py, runner/
 │                          #   (port of the parametric-cad-stl skill)
 ├─ migrations/             # D1
@@ -381,10 +385,10 @@ starts as a fresh decision, not a carried-over backlog item.
   `workflow.not_found` for a couple of minutes until provisioning
   propagates; (2) a build running during a container-image rollout can
   be SIGTERM'd (exit −15, empty log) — rerun it.
-- Still open after this session: WebMCP, Content Signals, DNS-AID,
-  Web Bot Auth (P4 remainder); copilot, x402, multi-user, three.js
-  viewer (P5); the §5 doc/publish toolset (`set_params`, `render_views`,
-  `put_doc`, `publish`) remains unimplemented.
+- Then-open items from this historical session were later addressed for
+  WebMCP, Content Signals, `set_params`, and `put_doc`; DNS-AID with DNSSEC,
+  Web Bot Auth, on-demand renders, publishing, copilot, x402, multi-user, and
+  the three.js viewer remain deferred.
 
 **2026-07-26: Agent discovery standards pass.**
 
@@ -434,3 +438,8 @@ manage a JSON object as the versioned `params.json` source. The runner places
 that file in the build workspace, and every queued build stores the exact
 parameter object in `build.params_json` for reproducibility. This avoids a
 schema migration while leaving parameters co-versioned with CAD source.
+
+**2026-07-26: Frontend service status.** The gallery now presents live Worker,
+D1, R2, and MCP dependency status with manual refresh, timed polling, and
+degraded/offline states. The header retains a compact status indicator and
+links back to the detailed panel.

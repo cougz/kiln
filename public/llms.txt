@@ -4,8 +4,9 @@
 > print-ready STLs, renders, instructions and BOMs. MCP-first: agents
 > connect over remote MCP and bring their own model.
 
-Status: P4 — cloud CAD builds, a remote MCP server, and a project
-gallery/build-page frontend are live. Live phase: GET /api/health.
+Status: P4 — cloud CAD builds, a remote MCP server, versioned parameters and
+documents, standard previews, and a project/gallery build frontend are live.
+Live phase: GET /api/health.
 
 ## MCP
 - POST/GET /mcp: Streamable HTTP MCP endpoint. 15 tools: list_projects,
@@ -36,6 +37,8 @@ gallery/build-page frontend are live. Live phase: GET /api/health.
   The engine executes + verifies (watertight, bed-fit, support-free scan);
   artifacts land in an immutable R2 prefix
 - GET /api/projects/:slug/builds/:id: status + verification report
+  (including the pinned `params` object); verified builds attempt standard
+  `img/kiln-front.png` and `img/kiln-side.png` previews
 - GET /api/projects/:slug/builds/:id/artifacts: authoritative R2 artifact
   inventory (supports opaque `cursor` pagination)
 - GET /api/projects/:slug/builds/:id/artifacts/<path>: download artifact

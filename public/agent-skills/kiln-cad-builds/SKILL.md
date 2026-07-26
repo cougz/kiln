@@ -30,4 +30,6 @@ print-ready artifacts.
 Keep dimensions parametric, assert critical measurements, and export parts
 at the print bed origin. A verified build checks watertightness, bed fit,
 placement, and overhangs; inspect warnings before treating a part as ready to
-print.
+print. A verified build with `asm/*.stl` attempts standard front and side
+preview PNGs; use `stl/*.stl` exports for print-oriented verification and
+target checks.

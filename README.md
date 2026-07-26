@@ -1,17 +1,18 @@
 # kiln
 
-Agentic parametric-CAD platform on Cloudflare: an LLM writes CadQuery
-code and documentation; kiln executes, measures, verifies, renders, and
-publishes the results (STLs, isometric previews, instructions, BOM) —
-exposed to agents over remote MCP.
+Agentic parametric-CAD platform on Cloudflare: an LLM writes CadQuery code
+and documentation; kiln executes, verifies, measures, renders, and archives
+print-ready deliverables. Agents connect over remote MCP; people can inspect
+projects, build reports, renders, and documents in the browser.
 
 **Status: P0-P4 done.** Live at https://kiln.timcf.workers.dev.
 Roadmap and architecture: [docs/PLAN.md](docs/PLAN.md).
 
 - ✅ **P0** — Worker + engine container scaffold, CI/CD via Workers Builds
 - ✅ **P1** — CAD engine (cadquery 2.8/OCCT + trimesh + manifold3d +
-  matplotlib), REST API for projects / versioned sources / builds, R2
-  artifact archive, D1 metadata
+  matplotlib), versioned source and parameter snapshots, async builds,
+  geometry verification, standard previews, R2 artifact archive, and D1
+  metadata
 - ✅ **P2** — MCP server (`/mcp`, 15 tools, server card at
   `/.well-known/mcp.json`). **Public, no auth.** Cloudflare Access
   managed OAuth was fully implemented and server-side verified, but
@@ -19,9 +20,10 @@ Roadmap and architecture: [docs/PLAN.md](docs/PLAN.md).
   — removed rather than carried as unused complexity. Milestone proven:
   an agent drove a full build end-to-end through the MCP tools alone.
 - ✅ **P3** — Frontend: vanilla-JS hash-routed SPA (`public/app.js`) over
-  the REST API — project gallery, project detail, build page (report,
-  renders, artifact downloads, inline docs). No bundler (CI doesn't run
-  one); Kumo/React deferred until that changes.
+  the REST API — project gallery, project detail, authored documents, build
+  reports, standard renders, artifact downloads, and a live Worker/D1/R2/MCP
+  service-status panel. No bundler (CI doesn't run one); Kumo/React remains
+  deferred until that changes.
 - ✅ **P4** — Agent-ready discovery: RFC 8288 `Link` headers, RFC 9727
   linkset API catalog + OpenAPI description, Markdown negotiation for the
   homepage and project pages, Content Signals, MCP Server Card, Agent Skills
@@ -39,7 +41,8 @@ Roadmap and architecture: [docs/PLAN.md](docs/PLAN.md).
   project's script, collect + verify artifacts), `/measure`, `/render`,
   `/artifact`, `/healthz`.
 - **Frontend** (`public/`): reads live status from `/api/health`;
-  project gallery + build pages over the REST API.
+  project gallery, document pages, build pages, and dependency status over the
+  REST API.
 - **R2** (`kiln-artifacts`): immutable per-build artifacts. **D1**
   (`kiln`): projects, versioned sources, builds, docs (`migrations/`).
 
@@ -93,8 +96,11 @@ curl -X POST https://kiln.timcf.workers.dev/api/projects \
 curl -X PUT https://kiln.timcf.workers.dev/api/projects/demo/source \
      -H 'content-type: application/json' \
      -d '{"path":"build.py","content":"..."}'
+curl -X PUT https://kiln.timcf.workers.dev/api/projects/demo/params \
+     -H 'content-type: application/json' -d '{"params":{"width":40}}'
 curl -X POST https://kiln.timcf.workers.dev/api/projects/demo/builds
 curl https://kiln.timcf.workers.dev/api/projects/demo/builds/<build_id>
+curl https://kiln.timcf.workers.dev/api/projects/demo/builds/<build_id>/artifacts
 
 # MCP (public, no auth required)
 curl -X POST https://kiln.timcf.workers.dev/mcp \

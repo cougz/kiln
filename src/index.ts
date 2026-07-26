@@ -338,7 +338,7 @@ function agentSkillsIndex(origin: string) {
         type: "skill-md",
         description: "Create versioned CadQuery projects and queue verified print-ready builds with kiln.",
         url: `${origin}/agent-skills/kiln-cad-builds/SKILL.md`,
-        digest: "sha256:eea64a249331929eb52a54bcde6777ee0786d1e10f3c6c195625d5119b0f58f6",
+        digest: "sha256:76d50bd9fe77c825f68caa3f5d0e089a0335f78a41add8034739d33b7f8d3977",
       },
     ],
   };

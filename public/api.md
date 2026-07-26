@@ -4,6 +4,10 @@ kiln is a public, unauthenticated API for versioned CadQuery projects and
 asynchronous verified builds. Use the remote MCP endpoint at `/mcp` when an
 MCP client is available.
 
+Build scripts can load `params.json` from their working directory. Set it
+through the parameter endpoint instead of treating it as an unversioned local
+file: the exact object is pinned in the source snapshot and build metadata.
+
 ## Discovery
 
 - OpenAPI: `/.well-known/openapi.json`
@@ -34,7 +38,8 @@ MCP client is available.
   Optional JSON fields are `entry`, `timeout_s`, and `bed`.
 - `GET /api/projects/:slug/builds` lists builds.
 - `GET /api/projects/:slug/builds/:buildId` returns status and verification
-  report. Poll until the status is `verified` or `failed`.
+  report plus the pinned `params` object. Poll until the status is `verified`
+  or `failed`.
 - `GET /api/projects/:slug/builds/:buildId/artifacts` lists the immutable
   archived artifacts. Pass an opaque `cursor` query parameter to continue a
   paginated result.
@@ -46,4 +51,6 @@ MCP client is available.
 
 Build source uses CadQuery/Python and is executed in a sandboxed Cloudflare
 Container. Reports include watertightness, printer-bed fit, placement, and
-overhang checks.
+overhang checks. Verified builds also attempt standard front/side PNG previews
+at `img/kiln-front.png` and `img/kiln-side.png`; a preview failure is recorded
+as a report note and does not invalidate geometry verification.
