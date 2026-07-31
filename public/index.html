@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>kiln — agentic parametric CAD</title>
-<meta name="description" content="Agentic parametric CAD with versioned CadQuery source, bounded geometry preflight heuristics, immutable STL artifacts, renders, and docs. Public reads and protected writes.">
+<meta name="description" content="Access-protected parametric CAD with versioned CadQuery source, bounded geometry preflight heuristics, immutable STL artifacts, renders, and docs.">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -12,31 +12,25 @@
   <div class="k-nav-inner">
     <a class="k-logo" href="#/">kiln</a>
     <span class="k-nav-tag">// agentic parametric CAD</span>
-    <button class="status" id="status" type="button" aria-label="Open service status">Checking service</button>
+    <div class="k-nav-actions">
+      <button class="status" id="status" type="button" aria-label="Open service status">Checking service</button>
+      <div class="nav-user" aria-live="polite">
+        <span class="nav-user__avatar" id="session-avatar" aria-hidden="true">?</span>
+        <div class="nav-user__copy">
+          <strong id="session-identity">Checking authentication...</strong>
+          <span id="session-help">Cloudflare Access</span>
+        </div>
+        <a class="nav-user__logout" id="session-logout" href="/cdn-cgi/access/logout" hidden>Sign out</a>
+      </div>
+    </div>
   </div>
 </header>
-<section class="access-bar" aria-labelledby="access-heading">
-  <div class="access-bar__inner">
-    <div class="access-bar__copy">
-      <strong id="access-heading">Cloudflare Access identity</strong>
-      <span>Browser sessions use Access SSO. Compatible MCP clients use Managed OAuth through the same identity policies.</span>
-    </div>
-    <div class="session-user" aria-live="polite">
-      <div class="session-user__copy">
-        <span class="session-user__label">Session</span>
-        <strong id="session-identity">Checking authentication...</strong>
-        <span id="session-help">Protected changes require an authenticated Access session.</span>
-      </div>
-      <a class="k-btn k-btn--ghost k-btn--sm" id="session-logout" href="/cdn-cgi/access/logout" hidden>Sign out</a>
-    </div>
-  </div>
-</section>
 <main>
   <div class="k-container" id="app"></div>
 </main>
 <footer class="k-footer">
   <div class="k-footer-inner">
-    Public reads; protected writes and compute use Cloudflare Access · MCP: <code>/mcp</code> · server metadata: <a href="/server.json"><code>/server.json</code></a> ·
+    Access-protected browser, REST, and MCP workspace · MCP: <code>/mcp</code> · server metadata: <a href="/server.json"><code>/server.json</code></a> ·
     <a href="/llms.txt">llms.txt</a> ·
     <a href="https://github.com/cougz/kiln">source</a>
   </div>

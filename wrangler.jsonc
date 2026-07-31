@@ -8,6 +8,11 @@
   "compatibility_date": "2026-06-01",
   "compatibility_flags": ["nodejs_compat"],
 
+  "vars": {
+    "CF_ACCESS_TEAM_DOMAIN": "https://cougz.cloudflareaccess.com",
+    "CF_ACCESS_AUD": "a30466eb6b49ec8ca10f432c156b8ebd5008d8297e61f9b9337ca4ed982fc22b"
+  },
+
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",

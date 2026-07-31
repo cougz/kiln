@@ -98,8 +98,14 @@ a { color: var(--link); }
   font-size: 13px;
   color: var(--text-subtle);
 }
-.k-nav .status {
+.k-nav-actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+.k-nav .status {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -125,41 +131,48 @@ a { color: var(--link); }
 
 /* --- access session -------------------------------------------------------- */
 
-.access-bar {
-  background: var(--recessed);
-  border-bottom: 1px solid var(--line);
-}
-.access-bar__inner {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 14px 24px;
-  display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(340px, .9fr);
-  align-items: center;
-  gap: 24px;
-}
-.access-bar__copy { display: grid; gap: 2px; }
-.access-bar__copy strong { font-size: 14px; font-weight: 500; }
-.access-bar__copy span { color: var(--text-muted); font-size: 13px; }
-.session-user {
+.nav-user {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 14px;
+  gap: 9px;
   min-width: 0;
 }
-.session-user__copy { display: grid; justify-items: end; min-width: 0; }
-.session-user__label {
+.nav-user__avatar {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in oklch, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in oklch, var(--accent) 30%, transparent);
+  color: var(--accent);
   font-family: var(--font-mono);
-  color: var(--text-subtle);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: .04em;
+  font-size: 12px;
 }
-.session-user__copy strong { font-size: 14px; overflow-wrap: anywhere; }
-.session-user__copy > span:last-child {
+.nav-user__copy {
+  display: grid;
+  min-width: 0;
+  max-width: 220px;
+  line-height: 1.25;
+}
+.nav-user__copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+}
+.nav-user__copy span {
   color: var(--text-subtle);
+  font-size: 10px;
+}
+.nav-user__logout {
+  flex: none;
+  color: var(--text-muted);
   font-size: 11px;
+  text-underline-offset: 3px;
 }
 
 /* --- layout ---------------------------------------------------------------- */
@@ -200,13 +213,12 @@ main { flex: 1; }
 .cta-row { display: flex; gap: 12px; flex-wrap: wrap; }
 @media (max-width: 640px) { .hero h1 { font-size: 32px; } }
 
-@media (max-width: 760px) {
-  .access-bar__inner { grid-template-columns: 1fr; gap: 12px; }
-}
 @media (max-width: 480px) {
-  .k-nav-inner, .access-bar__inner, .k-container, .k-footer-inner { padding-left: 16px; padding-right: 16px; }
-  .session-user { justify-content: flex-start; }
-  .session-user__copy { justify-items: start; }
+  .k-nav-inner, .k-container, .k-footer-inner { padding-left: 16px; padding-right: 16px; }
+  .k-nav-actions { gap: 10px; }
+  .k-nav .status { display: none; }
+  .nav-user__copy span, .nav-user__logout { display: none; }
+  .nav-user__copy { max-width: 130px; }
 }
 
 /* --- service status ---------------------------------------------------------- */
@@ -864,8 +876,6 @@ textarea { resize: vertical; }
   .section-heading { flex-wrap: wrap; }
   .artifact-list li { display: grid; }
   .artifact-list .k-btn { width: 100%; }
-  .session-user { align-items: stretch; display: grid; }
-  .session-user .k-btn { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

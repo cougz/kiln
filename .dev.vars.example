@@ -2,5 +2,5 @@
 KILN_API_KEY=replace-with-a-local-only-key
 
 # Set these in a deployed environment to validate Cloudflare Access assertions.
-# CF_ACCESS_TEAM_DOMAIN=https://your-team.cloudflareaccess.com
-# CF_ACCESS_AUD=studio-application-audience,mcp-application-audience
+# CF_ACCESS_TEAM_DOMAIN=https://cougz.cloudflareaccess.com
+# CF_ACCESS_AUD=a30466eb6b49ec8ca10f432c156b8ebd5008d8297e61f9b9337ca4ed982fc22b

@@ -5,6 +5,7 @@ const $status = document.getElementById("status");
 const $sessionIdentity = document.getElementById("session-identity");
 const $sessionHelp = document.getElementById("session-help");
 const $sessionLogout = document.getElementById("session-logout");
+const $sessionAvatar = document.getElementById("session-avatar");
 
 const DOC_KINDS = ["specification", "instructions", "bom", "page"];
 const POLL_DELAYS = [3000, 5000, 8000, 13000, 21000, 30000];
@@ -95,20 +96,25 @@ async function loadSession() {
   try {
     const session = await api("/session");
     if (!session.authenticated) {
-      $sessionIdentity.textContent = "Public read-only session";
-      $sessionHelp.textContent = "Open the Access-protected studio hostname to create, edit, or build.";
+      $sessionIdentity.textContent = "Identity unavailable";
+      $sessionHelp.textContent = "Writes disabled";
+      $sessionAvatar.textContent = "?";
       $sessionLogout.hidden = true;
       return;
     }
     const accessSession = session.identity?.method === "access";
-    $sessionIdentity.textContent = session.identity?.email || (accessSession ? "Authenticated Access user" : "Authenticated API client");
+    const identity = session.identity?.email || (accessSession ? "Access user" : "API client");
+    $sessionIdentity.textContent = identity;
+    $sessionIdentity.title = identity;
     $sessionHelp.textContent = accessSession
-      ? "Access policies authorize protected writes and compute."
-      : "This request used the deployment API-key fallback.";
+      ? "Write + compute access"
+      : "API-key fallback";
+    $sessionAvatar.textContent = identity.slice(0, 1).toUpperCase();
     $sessionLogout.hidden = !accessSession;
   } catch {
     $sessionIdentity.textContent = "Session unavailable";
-    $sessionHelp.textContent = "Authentication state could not be loaded.";
+    $sessionHelp.textContent = "Writes disabled";
+    $sessionAvatar.textContent = "?";
     $sessionLogout.hidden = true;
   }
 }
