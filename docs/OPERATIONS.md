@@ -8,7 +8,8 @@
   declared in `wrangler.jsonc`.
 - Docker for local engine execution and container builds.
 - Python 3.12 plus `engine/requirements.txt` for engine tests outside Docker.
-- A long random production `KILN_API_KEY` stored as a Worker secret.
+- Cloudflare Access self-hosted and MCP applications, an upstream identity
+  provider, and their team-domain and audience configuration.
 
 The repository's D1 ID and bucket name refer to the existing production
 deployment. Forks must create resources and update their Wrangler bindings.
@@ -23,7 +24,7 @@ python -m pip install -r engine/requirements.txt
 npm run validate
 ```
 
-`npm run validate` runs TypeScript checking, 15 Worker/MCP integration tests,
+`npm run validate` runs TypeScript checking, 17 Worker/MCP integration tests,
 30 Python engine tests, and a Wrangler dry run with no container rollout. The
 CI workflow adds JavaScript syntax checks, a moderate-severity production
 dependency audit, Python compilation, an engine image build, and migration
@@ -36,11 +37,29 @@ For a new environment:
 ```sh
 npx wrangler r2 bucket create kiln-artifacts
 npx wrangler d1 create kiln
-npx wrangler secret put KILN_API_KEY
 ```
 
-Put the returned D1 `database_id` in the target Wrangler configuration. Do not
-commit the secret. For local development, use the git-ignored `.dev.vars` file.
+Put the returned D1 `database_id` in the target Wrangler configuration.
+
+Configure these non-secret variables in the deployment environment:
+
+```dotenv
+CF_ACCESS_TEAM_DOMAIN=https://your-team.cloudflareaccess.com
+CF_ACCESS_AUD=studio-application-audience,mcp-application-audience
+```
+
+Create a self-hosted Access application for the studio hostname and an MCP
+server application for the MCP endpoint. Enable Managed OAuth on the MCP
+application, configure only the redirect URI classes required by supported
+clients, and apply the intended identity or group policies. Use instant
+authentication when one SSO provider should receive users directly.
+
+For a staged migration or local development without Access, optionally set a
+distinct transition key in the git-ignored `.dev.vars` or Worker secret:
+
+```sh
+npx wrangler secret put KILN_API_KEY
+```
 
 Optionally set `ALLOWED_ORIGINS` to a comma-separated list of exact browser
 origins for cross-origin MCP. Values may be only complete `http` or `https`
@@ -99,9 +118,10 @@ curl --fail-with-body 'https://kiln.timcf.workers.dev/api/health?deep=1'
 curl --fail-with-body https://kiln.timcf.workers.dev/api/engine/healthz
 ```
 
-The shallow response checks D1, R2, Workflow binding configuration, version,
-and whether write authentication is configured. `deep=1` also starts and probes
-the engine and can incur a cold start. Health responses are not cached.
+The shallow response checks D1, R2, Workflow binding configuration, whether
+Access authentication is configured, and whether any write authentication is
+configured. `deep=1` also starts and probes the engine and can incur a cold
+start. Health responses are not cached.
 
 Require all of these before enabling writers:
 
@@ -110,6 +130,7 @@ Require all of these before enabling writers:
 - `d1: true`
 - `r2: true`
 - `workflow_configured: true`
+- `access_auth_configured: true`
 - `write_auth_configured: true`
 - Deep `engine.ok: true`
 
@@ -168,21 +189,28 @@ Scheduled reconciliation marks builds stale after 30 minutes without progress.
 If reconciliation repeatedly affects healthy long builds, investigate engine,
 Workflow, D1, and R2 latency before changing the threshold.
 
-## Key Rotation
+## Authentication Operations
 
-Version 0.3.0 accepts one active shared key and has no overlap mechanism:
+Access signing keys rotate automatically. The Worker uses the team's remote
+JWKS and selects by JWT `kid`; do not hard-code a public certificate. Changing
+an Access policy or removing a user is re-evaluated by Access when browser or
+Managed OAuth sessions refresh.
 
-1. Stop or coordinate all writers and MCP clients.
+Recommended Managed OAuth settings are a 5 to 15 minute access-token lifetime
+and a one to two week grant session. Test RFC 8707 discovery, dynamic client
+registration where enabled, PKCE login, refresh, and revocation with every
+supported MCP client.
+
+The optional transition API key still has no overlap mechanism. To rotate it:
+
+1. Stop or coordinate transition-key clients.
 2. Generate a new long random key.
-3. Run `npx wrangler secret put KILN_API_KEY` and enter the new value.
-4. Wait for the secret deployment to become active.
-5. Verify the old key receives `401` and the new key succeeds.
-6. Update clients through their secret stores, not source control or URLs.
-7. Resume writers and clear old browser tab storage.
+3. Run `npx wrangler secret put KILN_API_KEY`.
+4. Verify the old key receives `401` and the new key succeeds.
+5. Update automation secret stores and resume those clients.
 
-If a key is exposed in a public project, rotate it first. Source history is
-immutable and public, so rotation is required even if another presentation
-layer later hides the offending revision.
+Remove `KILN_API_KEY` after all interactive and automated consumers have moved
+to Access user or service-token identities.
 
 ## Incident Notes
 
@@ -198,7 +226,9 @@ layer later hides the offending revision.
   cause.
 - Stale build: reconciliation has made the row terminal. Use exact retry rather
   than editing the old row.
-- Lost key: replace it; there is no recovery or OAuth flow.
+- Access login failure: inspect Access authentication logs, application policy,
+  IdP status, team-domain issuer, and configured audience tags.
+- Lost transition key: rotate it immediately and migrate the client to Access.
 
 ## External Constraints
 

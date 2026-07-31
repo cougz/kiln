@@ -118,9 +118,11 @@ session state and tool-supplied identity or permission fields are not trusted.
 
 ## Browser
 
-The dependency-free hash-routed application reads the same public REST API. An
-API key entered by the user is kept in `sessionStorage` for that tab and sent
-as Bearer authorization only for protected calls. The application supports:
+The dependency-free hash-routed application reads the same REST API. On an
+Access-protected studio hostname, Cloudflare authenticates the browser with its
+HTTP-only application cookie and forwards a signed `Cf-Access-Jwt-Assertion`.
+The Worker validates that assertion and `GET /api/session` exposes only a
+sanitized identity summary to JavaScript. The application supports:
 
 - Public project browsing and a protected project-creation template.
 - Public project metadata with protected editing.
@@ -133,7 +135,27 @@ as Bearer authorization only for protected calls. The application supports:
 - A same-origin WebGL STL viewer bounded to 16 MiB and 250,000 triangles.
 
 The optional browser `document.modelContext` integration registers only two
-public read tools and never receives the API key.
+public read tools and never receives an Access assertion or transition API key.
+
+## Authentication
+
+Cloudflare Access is the primary interactive authentication boundary:
+
+- Browser requests use the normal Access redirect, upstream SSO, and
+  `CF_Authorization` application cookie.
+- RFC 8707-capable MCP clients use Access Managed OAuth with authorization code
+  and PKCE. Cloudflare keeps the opaque OAuth token out of the origin contract.
+- Both flows arrive at the Worker as `Cf-Access-Jwt-Assertion`. The Worker
+  verifies RS256, issuer, application audience, expiry, and application-token
+  type against the team's rotating JWKS.
+- Access user `sub` and service-token `common_name` become stable rate-limit and
+  audit subjects. Access-authenticated browser writes must be same-origin.
+- `KILN_API_KEY` remains an optional compatibility and local-development
+  fallback; the browser no longer accepts or stores it.
+
+Separate browser and MCP Access applications may share the Worker. Their
+audience tags are configured as a comma-separated `CF_ACCESS_AUD` allowlist.
+Cloudflare Access still enforces each hostname's policy before the Worker runs.
 
 ## Discovery Metadata
 

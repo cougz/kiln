@@ -2,7 +2,7 @@
 
 Version 0.3.0 provides public reads for versioned CadQuery projects and
 immutable build archives. Creating or changing data and all compute operations
-require an API key.
+require a validated Cloudflare Access identity or the transition API key.
 
 Production base URL: `https://kiln.timcf.workers.dev`
 
@@ -13,7 +13,17 @@ API catalog: <https://kiln.timcf.workers.dev/.well-known/api-catalog>
 
 ## Authentication
 
-Send the deployment's `KILN_API_KEY` in one of these headers:
+Browser clients authenticate through the Cloudflare Access application
+protecting the studio hostname. The browser sends the HTTP-only Access session
+cookie automatically; it does not read or forward a token in JavaScript.
+
+RFC 8707-capable non-browser clients use Cloudflare Access Managed OAuth.
+Cloudflare handles OAuth discovery, authorization code with PKCE, opaque access
+tokens, and refresh. The origin receives a signed `Cf-Access-Jwt-Assertion` for
+both browser and Managed OAuth requests.
+
+Existing automation and local development may use the optional `KILN_API_KEY`
+fallback in one of these headers:
 
 ```http
 Authorization: Bearer <key>
@@ -23,13 +33,13 @@ Authorization: Bearer <key>
 X-Kiln-API-Key: <key>
 ```
 
-If both are present, their values must match. Keys in query parameters are not
-accepted. Missing, malformed, mismatched, or invalid credentials receive `401`
-with `WWW-Authenticate: Bearer`. There is no OAuth service in 0.3.0. See
-[auth.md](./auth.md).
+If both key headers are present, their values must match. Credentials in query
+parameters are not accepted. Missing or invalid credentials receive `401` with
+`WWW-Authenticate: Bearer`. See [auth.md](./auth.md).
 
-Public reads remain available without a key. An unconfigured server key does
-not make protected routes public; those routes continue to return `401`.
+Public reads remain available without authentication on the public hostname.
+Missing Access configuration and an absent fallback key do not make protected
+routes public; those routes continue to return `401`.
 
 ## Request Rules
 
@@ -47,8 +57,9 @@ not make protected routes public; those routes continue to return `401`.
 
 | Method and path | Access | Purpose |
 |---|---|---|
-| `GET /api/health` | Public | Check D1, R2, Workflow, version, and key configuration; `?deep=1` also probes the engine |
+| `GET /api/health` | Public | Check D1, R2, Workflow, version, and authentication configuration; `?deep=1` also probes the engine |
 | `GET /api/engine/healthz` | Public | Probe the internal engine health endpoint; this is the only raw engine route exposed |
+| `GET /api/session` | Public | Read sanitized authentication method, email, and permissions for the current request |
 | `GET /api/projects` | Public | List project summaries |
 | `POST /api/projects` | Write | Create a project |
 | `GET /api/projects/{slug}` | Public | Read metadata, source heads, documents, and ten recent builds |
@@ -74,7 +85,9 @@ measurement calls.
 
 ## Project and Source Example
 
-Use a unique slug because 0.3.0 has no delete operation:
+The examples use the transition API key so they work in a terminal without a
+browser OAuth implementation. Use a unique slug because 0.3.0 has no delete
+operation:
 
 ```sh
 ORIGIN=https://kiln.timcf.workers.dev
@@ -303,8 +316,8 @@ The same ID is returned in `X-Request-Id`. Common statuses:
 | Status | Meaning |
 |---|---|
 | `400` | Invalid path, query, JSON body shape, settings, cursor, or idempotency key |
-| `401` | Missing or invalid API key |
-| `403` | Authenticated context lacks the required permission |
+| `401` | Missing or invalid Access assertion or transition API key |
+| `403` | Authenticated context lacks permission, or an Access browser write is cross-origin |
 | `404` | Route, project, source, document, build, or artifact not found |
 | `405` | Method not allowed; inspect `Allow` |
 | `409` | Slug conflict, terminal lifecycle conflict, unavailable archive, or missing/failed exact provenance |
@@ -339,8 +352,8 @@ same request with the same idempotency key before creating a new key.
 | Engine artifact size | 16 MiB each, 64 MiB aggregate |
 | Retained build log | final 20,000 bytes |
 | REST read rate | 180 per 60 seconds per client identity |
-| Mutation rate | 60 per 60 seconds per key identity |
-| Compute rate | 10 per 60 seconds per key identity |
+| Mutation rate | 60 per 60 seconds per authenticated identity |
+| Compute rate | 10 per 60 seconds per authenticated identity |
 | MCP transport rate | 240 requests per 60 seconds per client identity |
 
 Cloudflare platform limits can apply in addition to these application limits.

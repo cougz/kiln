@@ -30,7 +30,7 @@ export const MCP_TOOL_PERMISSIONS = {
 const DEFAULT_ORIGIN = "https://kiln.timcf.workers.dev";
 
 const INSTRUCTIONS = `Kiln exposes public read tools and resources. Writes and compute operations are
-API-key protected; unauthenticated sessions can only read. Builds run asynchronously:
+Cloudflare Access protected; unauthenticated sessions can only read. The transition API key remains available to existing automation. Builds run asynchronously:
 run_build and retry_build return a durable build ID immediately, so poll get_build about
 every 15 seconds until verified, failed, or cancelled. Verification and measurement are
 geometry preflight only, not manufacturing, structural, dimensional, or safety certification.`;

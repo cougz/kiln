@@ -1,7 +1,7 @@
 ---
 name: kiln-cad-builds
 description: Author versioned CadQuery projects, queue reproducible builds, and inspect bounded geometry-preflight results and immutable artifacts with kiln.
-compatibility: Requires HTTPS and either Streamable HTTP MCP or a REST client. Protected operations require a kiln API key. Build scripts target Python 3.12 and CadQuery 2.8.
+compatibility: Requires HTTPS and either an RFC 8707-capable Streamable HTTP MCP client, an Access service token, or a REST client using the transition API key. Build scripts target Python 3.12 and CadQuery 2.8.
 metadata:
   version: "0.3.0"
   service: "https://kiln.timcf.workers.dev"
@@ -40,8 +40,14 @@ loads, and hazards independently.
 - Authentication guide: `https://kiln.timcf.workers.dev/auth.md`
 - Browser workspace: `https://kiln.timcf.workers.dev/`
 
-Public read tools and resources need no credentials. Configure either header on
-the MCP endpoint for write and compute tools:
+Public read tools and resources need no credentials on the public hostname.
+For write and compute tools, use Cloudflare Access Managed OAuth. The client
+must support RFC 8707 protected-resource indicators, authorization code with
+PKCE, and the redirect URI allowed by the deployment. Access opens the user's
+browser and redirects through the configured SSO provider.
+
+For unattended automation use an Access service token. Existing automation may
+temporarily configure either transition-key header:
 
 ```http
 Authorization: Bearer <key>
@@ -51,9 +57,9 @@ Authorization: Bearer <key>
 X-Kiln-API-Key: <key>
 ```
 
-There is no OAuth flow. Do not invent one or search for a token endpoint.
-Send the key on every protected `tools/call`; session initialization does not
-authorize later requests, and key rotation immediately affects open sessions.
+Managed OAuth discovery is provided by Cloudflare Access rather than the kiln
+Worker. Access validates its opaque OAuth token and forwards a signed identity
+assertion; kiln checks authorization on every protected `tools/call`.
 
 ## MCP Inventory
 
@@ -119,7 +125,7 @@ Failures set the MCP error flag and return:
   "error": {
     "code": "AUTH_REQUIRED",
     "status": 401,
-    "message": "API key authentication required",
+    "message": "authentication required",
     "retryable": false
   }
 }

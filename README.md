@@ -8,7 +8,8 @@ It serves three audiences:
   the browser, start from a CadQuery template, inspect build history and
   renders, and orbit archived STL files in the built-in 3D viewer.
 - Agents use the Streamable HTTP MCP endpoint or the REST API. Public reads do
-  not require credentials; every write and compute operation does.
+  not require credentials; writes and compute use Cloudflare Access Managed
+  OAuth, an Access service token, or the transition API key.
 - Operators deploy one Worker, isolated Python engine containers, a Workflow,
   D1, R2, and Durable Objects from this repository.
 
@@ -16,16 +17,16 @@ Production: <https://kiln.timcf.workers.dev>
 
 ## Release Status
 
-Version 0.3.0 is complete and deployed. Its release gate covers 15 Worker/MCP
+Version 0.3.0 is the deployed release baseline. The current source gate covers 17 Worker/MCP
 integration tests, 30 engine tests, TypeScript and browser script checks, the
 engine Docker image, a clean migration apply, and a Wrangler deployment dry
 run. The pinned dependency tree has no known `npm audit` vulnerabilities, and
 CI rejects moderate-or-higher production dependency advisories.
 
-Production verification includes shallow and deep health probes, authenticated
-write enforcement, MCP initialization and discovery of all 20 tools, and
-startup of the CadQuery 2.8 engine. See [the changelog](docs/CHANGELOG.md) for
-the release details.
+Deployment verification includes shallow and deep health probes, Access and
+transition-key write enforcement, MCP initialization and discovery of all 20
+tools, and startup of the CadQuery 2.8 engine. See
+[the changelog](docs/CHANGELOG.md) for the release details.
 
 ## Important Limits
 
@@ -38,26 +39,42 @@ slice it for the actual machine and material, and validate critical dimensions
 and loads independently.
 
 All project metadata, source, parameters, documents, build reports, and
-artifacts are public. Never submit secrets or private designs.
+artifacts are public on the public hostname. Never submit secrets or private
+designs.
 
 ## Access Model
 
-| Surface | Public | API key required |
+| Surface | Public | Access identity required |
 |---|---|---|
-| REST | Health, projects, source history, parameters, documents, builds, artifacts | Create or edit data, queue/retry/cancel builds, measure or verify geometry |
-| MCP | Read tools, five resource templates, one prompt | Write and compute tools |
+| REST | Health, session state, projects, source history, parameters, documents, builds, artifacts | Create or edit data, queue/retry/cancel builds, measure or verify geometry |
+| MCP | Read tools, five resource templates, one prompt | Write and compute tools through Managed OAuth |
 | Engine | `GET /api/engine/healthz` | No other engine route is exposed through the Worker |
 
-Set `KILN_API_KEY` as a Worker secret. Send its value in either header:
+For Cloudflare Access, configure these Worker variables to match the Access
+applications protecting the browser and MCP hostnames:
+
+```dotenv
+CF_ACCESS_TEAM_DOMAIN=https://your-team.cloudflareaccess.com
+CF_ACCESS_AUD=browser-audience,mcp-audience
+```
+
+The browser uses the Access session cookie without exposing it to JavaScript.
+RFC 8707-capable MCP clients use Managed OAuth. Cloudflare validates the opaque
+OAuth token and forwards a signed `Cf-Access-Jwt-Assertion`; the Worker verifies
+that assertion against the team JWKS, issuer, and configured audience.
+
+`KILN_API_KEY` remains an optional compatibility and local-development fallback.
+Send its value in either header:
 
 ```http
 Authorization: Bearer <key>
 X-Kiln-API-Key: <key>
 ```
 
-If both headers are sent, they must match. Do not put a key in a URL, source
-file, parameter, document, or artifact. There is no OAuth service or token
-exchange in 0.3.0; see [public/auth.md](public/auth.md).
+If both key headers are sent, they must match. Do not put credentials in a URL,
+source file, parameter, document, or artifact. See
+[public/auth.md](public/auth.md) for the browser, Managed OAuth, Access JWT,
+service-token, and migration flows.
 
 ## Interfaces
 
@@ -90,13 +107,14 @@ npm run validate
 npm run dev
 ```
 
-For protected local operations, create the git-ignored `.dev.vars` file:
+For protected local operations without Access, create the git-ignored
+`.dev.vars` file with the transition key:
 
 ```dotenv
 KILN_API_KEY=replace-with-a-long-random-development-key
 ```
 
-`npm run validate` type-checks the Worker and test suite, runs 15 Worker/MCP
+`npm run validate` type-checks the Worker and test suite, runs 17 Worker/MCP
 integration tests and 30 engine tests, and performs a Wrangler dry run. GitHub
 Actions also checks browser script syntax, moderate-or-higher production
 dependency advisories, Python compilation, the engine Docker image, and a clean
@@ -111,10 +129,15 @@ bucket. A new deployment must create its own resources and replace the D1 ID in
 ```sh
 npx wrangler r2 bucket create kiln-artifacts
 npx wrangler d1 create kiln
-npx wrangler secret put KILN_API_KEY
 npx wrangler d1 migrations apply kiln --remote
 npm run deploy
 ```
+
+Before enabling browser or MCP writers, create the Cloudflare Access
+applications, enable Managed OAuth on the MCP application, configure
+`CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD`, and verify `/api/session` through
+both surfaces. Set `KILN_API_KEY` only while migrating existing automation or
+when a non-Access local environment needs it.
 
 Always run the explicit migration command. As a deployment safety gate, the
 Worker and Workflow also check migration `0003_build_provenance.sql` before
@@ -185,7 +208,8 @@ curl --fail-with-body -sS \
   "${KILN_ORIGIN}/api/projects/${SLUG}/builds/${BUILD_ID}/artifacts"
 ```
 
-Also verify protected routes reject a missing key:
+Also verify protected routes reject requests without an Access assertion or
+transition key:
 
 ```sh
 curl -i -X POST -H 'Content-Type: application/json' -d '{}' \

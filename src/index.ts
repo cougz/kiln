@@ -1,4 +1,5 @@
 import { getContainer } from "@cloudflare/containers";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 import { KilnEngine } from "./engine";
 import { KilnMcp, MCP_TOOL_PERMISSIONS, type McpProps } from "./mcp";
 import { KilnBuildWorkflow } from "./workflow";
@@ -16,6 +17,8 @@ export interface Env {
   ARTIFACTS: R2Bucket;
   DB: D1Database;
   KILN_API_KEY?: string;
+  CF_ACCESS_TEAM_DOMAIN?: string;
+  CF_ACCESS_AUD?: string;
   ALLOWED_ORIGINS?: string;
 }
 
@@ -38,6 +41,8 @@ interface TrustedAuthorization {
   subject: string;
   canMutate: boolean;
   canCompute: boolean;
+  method: "access" | "api_key";
+  email?: string;
 }
 
 interface EngineProbe {
@@ -46,6 +51,8 @@ interface EngineProbe {
   latency_ms: number;
   details?: unknown;
 }
+
+const accessJwks = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -233,7 +240,7 @@ async function handleMcp(
   const permission = mcpToolPermission(message);
   if (permission) {
     if (!authorization) {
-      const response = mcpError(401, -32001, "API key authentication required");
+      const response = mcpError(401, -32001, "authentication required");
       const headers = new Headers(response.headers);
       headers.set("WWW-Authenticate", "Bearer");
       return withMcpCors(responseWithHeaders(response, headers), browserOrigin);
@@ -315,6 +322,9 @@ function mcpToolPermission(message: Record<string, unknown> | undefined): "mutat
 }
 
 async function authenticate(req: Request, env: Env): Promise<TrustedAuthorization | undefined> {
+  const assertion = req.headers.get("Cf-Access-Jwt-Assertion");
+  if (assertion !== null) return authenticateAccessAssertion(assertion, env);
+
   const expected = env.KILN_API_KEY;
   if (!expected) return undefined;
 
@@ -341,7 +351,66 @@ async function authenticate(req: Request, env: Env): Promise<TrustedAuthorizatio
     subject: `api-key:${hex(expectedDigest)}`,
     canMutate: true,
     canCompute: true,
+    method: "api_key",
   };
+}
+
+async function authenticateAccessAssertion(
+  assertion: string,
+  env: Env,
+): Promise<TrustedAuthorization | undefined> {
+  const configuration = accessConfiguration(env);
+  if (!configuration || !assertion) return undefined;
+  let jwks = accessJwks.get(configuration.issuer);
+  if (!jwks) {
+    jwks = createRemoteJWKSet(new URL(`${configuration.issuer}/cdn-cgi/access/certs`));
+    accessJwks.set(configuration.issuer, jwks);
+  }
+
+  try {
+    const { payload } = await jwtVerify(assertion, jwks, {
+      issuer: configuration.issuer,
+      audience: configuration.audiences,
+      algorithms: ["RS256"],
+    });
+    if (payload.type !== "app") return undefined;
+    const identity = typeof payload.sub === "string" && payload.sub
+      ? `user:${payload.sub}`
+      : typeof payload.common_name === "string" && payload.common_name
+        ? `service:${payload.common_name}`
+        : undefined;
+    if (!identity || identity.length > 256) return undefined;
+    const email = typeof payload.email === "string" && payload.email.length <= 320
+      ? payload.email
+      : undefined;
+    return {
+      subject: `access:${identity}`,
+      canMutate: true,
+      canCompute: true,
+      method: "access",
+      ...(email ? { email } : {}),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function accessConfiguration(env: Env): { issuer: string; audiences: string[] } | undefined {
+  const rawIssuer = env.CF_ACCESS_TEAM_DOMAIN?.trim();
+  const audiences = (env.CF_ACCESS_AUD ?? "")
+    .split(",")
+    .map((audience) => audience.trim())
+    .filter((audience) => /^[\x21-\x7e]{1,256}$/.test(audience));
+  if (!rawIssuer || !audiences.length) return undefined;
+  try {
+    const issuer = new URL(rawIssuer);
+    if (issuer.protocol !== "https:" || issuer.username || issuer.password || issuer.pathname !== "/" || issuer.search || issuer.hash) {
+      return undefined;
+    }
+    return { issuer: issuer.origin, audiences: [...new Set(audiences)] };
+  } catch {
+    return undefined;
+  }
 }
 
 async function sha256Bytes(value: string): Promise<Uint8Array> {
@@ -393,12 +462,14 @@ async function healthResponse(env: Env, deep: boolean): Promise<Response> {
   ]);
   const workflowConfigured = typeof (env.BUILD_WORKFLOW as unknown as { create?: unknown })?.create === "function";
   const ok = d1 && r2 && workflowConfigured && (!deep || engine?.ok === true);
+  const accessAuthConfigured = accessConfiguration(env) !== undefined;
   return withNoStore(json({
     ok,
     service: "kiln",
     version: APP_VERSION,
     phase: PHASE,
-    write_auth_configured: Boolean(env.KILN_API_KEY),
+    write_auth_configured: accessAuthConfigured || Boolean(env.KILN_API_KEY),
+    access_auth_configured: accessAuthConfigured,
     d1,
     r2,
     workflow_configured: workflowConfigured,
@@ -510,14 +581,6 @@ function serverDocument(origin: string, compatibilityAlias?: string) {
       {
         type: "streamable-http",
         url: `${origin}/mcp`,
-        headers: [
-          {
-            name: "X-Kiln-API-Key",
-            description: "Optional for public reads; required for write and compute tools.",
-            isRequired: false,
-            isSecret: true,
-          },
-        ],
       },
     ],
     _meta: {
@@ -536,7 +599,8 @@ function serverDocument(origin: string, compatibilityAlias?: string) {
         authentication: {
           public_reads: true,
           protected_operations: ["write", "compute"],
-          accepted_headers: ["Authorization: Bearer <key>", "X-Kiln-API-Key: <key>"],
+          preferred: "Cloudflare Access Managed OAuth with RFC 8707",
+          transition_fallback: ["Authorization: Bearer <key>", "X-Kiln-API-Key: <key>"],
         },
         api: {
           openapi: `${origin}/.well-known/openapi.json`,
@@ -640,7 +704,7 @@ function openApi(origin: string) {
       version: APP_VERSION,
       description: [
         "Public reads for versioned CadQuery projects and immutable build artifacts.",
-        "Writes and compute require the configured API key. Geometry checks are preflight heuristics, not manufacturing or safety certification.",
+        "Writes and compute require Cloudflare Access or the transition API key. Geometry checks are preflight heuristics, not manufacturing or safety certification.",
       ].join(" "),
     },
     servers: [{ url: origin, description: "Current kiln deployment" }],
@@ -668,6 +732,7 @@ function openApi(origin: string) {
               version: APP_VERSION,
               phase: PHASE,
               write_auth_configured: true,
+              access_auth_configured: true,
               d1: true,
               r2: true,
               workflow_configured: true,
@@ -695,6 +760,17 @@ function openApi(origin: string) {
               },
             }),
             ...errors("503"),
+          },
+        },
+      },
+      "/api/session": {
+        get: {
+          operationId: "getSession",
+          tags: ["Service"],
+          summary: "Read the current authentication state",
+          description: "Returns a sanitized Access or transition-key identity summary without exposing credentials or the stable subject.",
+          responses: {
+            "200": jsonResponse("Current session and permissions", ref("Session")),
           },
         },
       },
@@ -1047,13 +1123,13 @@ function openApi(origin: string) {
         bearerAuth: {
           type: "http",
           scheme: "bearer",
-          description: "KILN_API_KEY as a Bearer token. Required only for write and compute operations.",
+          description: "Cloudflare Access Managed OAuth opaque bearer token, or the transition KILN_API_KEY. Required only for write and compute operations.",
         },
         apiKeyAuth: {
           type: "apiKey",
           in: "header",
           name: "X-Kiln-API-Key",
-          description: "KILN_API_KEY header alternative. Never place the key in a URL.",
+          description: "Transition KILN_API_KEY header alternative for existing automation. Never place the key in a URL.",
         },
       },
       parameters: {
@@ -1136,8 +1212,8 @@ function openApi(origin: string) {
       },
       responses: Object.fromEntries(Object.entries({
         BadRequest: ["Malformed path, query, or request body", 400, "INVALID_REQUEST"],
-        Unauthorized: ["Missing or invalid API key", 401, "AUTH_REQUIRED"],
-        Forbidden: ["Authenticated caller lacks permission", 403, "INSUFFICIENT_PERMISSION"],
+        Unauthorized: ["Missing or invalid authentication", 401, "AUTH_REQUIRED"],
+        Forbidden: ["Authenticated caller lacks permission or violates browser-origin policy", 403, "INSUFFICIENT_PERMISSION"],
         NotFound: ["Resource was not found", 404, "NOT_FOUND"],
         MethodNotAllowed: ["HTTP method is not supported", 405, "METHOD_NOT_ALLOWED"],
         Conflict: ["Request conflicts with current resource state", 409, "CONFLICT"],
@@ -1177,13 +1253,14 @@ function openApi(origin: string) {
         },
         Health: {
           type: "object",
-          required: ["ok", "service", "version", "phase", "write_auth_configured", "d1", "r2", "workflow_configured", "workflow"],
+          required: ["ok", "service", "version", "phase", "write_auth_configured", "access_auth_configured", "d1", "r2", "workflow_configured", "workflow"],
           properties: {
             ok: { type: "boolean" },
             service: { const: "kiln" },
             version: { type: "string", example: APP_VERSION },
             phase: { type: "string" },
             write_auth_configured: { type: "boolean" },
+            access_auth_configured: { type: "boolean" },
             d1: { type: "boolean" },
             r2: { type: "boolean" },
             workflow_configured: { type: "boolean" },
@@ -1201,6 +1278,37 @@ function openApi(origin: string) {
                 status: { type: ["integer", "null"] },
                 latency_ms: { type: "integer", minimum: 0 },
                 details: {},
+              },
+            },
+          },
+        },
+        Session: {
+          type: "object",
+          required: ["authenticated", "identity", "permissions"],
+          additionalProperties: false,
+          properties: {
+            authenticated: { type: "boolean" },
+            identity: {
+              oneOf: [
+                { type: "null" },
+                {
+                  type: "object",
+                  required: ["method", "email"],
+                  additionalProperties: false,
+                  properties: {
+                    method: { type: "string", enum: ["access", "api_key"] },
+                    email: { type: ["string", "null"] },
+                  },
+                },
+              ],
+            },
+            permissions: {
+              type: "object",
+              required: ["mutate", "compute"],
+              additionalProperties: false,
+              properties: {
+                mutate: { type: "boolean" },
+                compute: { type: "boolean" },
               },
             },
           },
@@ -1762,7 +1870,7 @@ function homeMarkdown(origin: string): string {
     "",
     "## Agent access",
     "",
-    `- MCP (public reads; API-key protected writes and compute): ${origin}/mcp`,
+    `- MCP (public reads; Access Managed OAuth for writes and compute): ${origin}/mcp`,
     `- MCP Registry server metadata: ${origin}/server.json`,
     `- REST API catalog: ${origin}/.well-known/api-catalog`,
     `- OpenAPI description: ${origin}/.well-known/openapi.json`,

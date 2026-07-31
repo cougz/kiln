@@ -5,18 +5,20 @@
 kiln 0.3.0 intentionally separates public data access from protected changes:
 
 - REST and MCP reads are public.
-- Writes and compute require the single shared `KILN_API_KEY`.
-- Missing server configuration does not open writes. Protected operations
-  still return `401` when `KILN_API_KEY` is absent.
-- The Worker accepts `Authorization: Bearer <key>` or
-  `X-Kiln-API-Key: <key>`. If both are present, they must match.
-- There is no OAuth, account system, private-project mode, delegated scope, or
-  token issuance endpoint.
+- Writes and compute require a validated Cloudflare Access application identity
+  or the optional transition `KILN_API_KEY`.
+- Browser users authenticate through Access and the configured SSO provider.
+  RFC 8707-capable MCP clients authenticate through Access Managed OAuth.
+- The Worker validates `Cf-Access-Jwt-Assertion` against the configured team
+  JWKS, issuer, application audience, expiry, RS256 algorithm, and token type.
+- Missing server configuration does not open writes. Protected operations still
+  return `401` when no valid Access assertion or transition key is present.
+- There is no private-project mode or project-level role model.
 
-The API key grants all mutation and compute permissions. It is not a tenant
-boundary. Store it as a Cloudflare Worker secret, distribute it out of band,
-and rotate it immediately if exposed. Version 0.3.0 accepts one active key, so
-rotation is a coordinated cutover rather than an overlap window.
+An accepted Access identity currently grants all mutation and compute
+permissions after passing the Access application policy. The transition API key
+grants the same permissions and is not a tenant boundary. Keep it only for
+existing automation or local development and rotate it immediately if exposed.
 
 ## Public Data Warning
 
@@ -99,8 +101,8 @@ process error.
 ## Abuse Controls
 
 - REST limits public reads to 180 requests per 60-second window per client
-  identity, mutations to 60 per key identity, and compute to 10 per key
-  identity.
+  identity, mutations to 60 per authenticated identity, and compute to 10 per
+  authenticated identity.
 - MCP applies a 240-per-minute transport limit plus the same 60-per-minute
   mutation and 10-per-minute compute limits. Credentials are checked on every
   protected tool call rather than trusted from session state.
@@ -125,18 +127,25 @@ origins in `ALLOWED_ORIGINS`. Null, malformed, credential-bearing, path-bearing,
 and non-HTTP origins are rejected. Non-browser MCP clients generally omit the
 `Origin` header.
 
-The browser stores a user-entered key in tab-scoped `sessionStorage`. This is a
-convenience, not a hardware-backed secret store. Clear it on shared machines
-and close the tab after use.
+The browser never reads the HTTP-only Access cookie or stores an API key.
+Access-authenticated REST writes reject a cross-origin `Origin` header and
+cross-site Fetch Metadata. MCP keeps its exact browser-origin allowlist.
+
+Managed OAuth access tokens are opaque and are validated by Cloudflare Access,
+not by kiln. The origin trusts only the separately signed and locally validated
+Access assertion. When custom domains are used, disable unprotected alternate
+routes or attach Access directly to the Worker.
 
 ## Operational Checks
 
 After every deployment:
 
-1. Confirm `/api/health` reports version `0.3.0` and
-   `write_auth_configured: true`.
-2. Confirm a protected request without a key returns `401`.
-3. Confirm the same request with the expected key succeeds.
+1. Confirm `/api/health` reports version `0.3.0`,
+   `access_auth_configured: true`, and `write_auth_configured: true`.
+2. Confirm a protected request without Access or fallback credentials returns
+   `401`.
+3. Confirm browser SSO and MCP Managed OAuth both produce an authenticated
+   `/api/session` or protected tool call.
 4. Run a unique-slug build and inspect source and artifact SHA-256 manifests.
 5. Review Worker logs for authentication failures, rate limits, dispatch
    failures, stale builds, and archive integrity errors without logging keys or

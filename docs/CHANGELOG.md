@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Authentication
+
+- Added Cloudflare Access application-JWT validation against the team JWKS,
+  issuer, audience, expiry, RS256 algorithm, and application-token type.
+- Added browser SSO session discovery, Access logout, same-origin write checks,
+  and support for Managed OAuth identities on protected MCP tool calls.
+- Retained `KILN_API_KEY` as an optional transition and local-development
+  fallback while removing browser-side key storage.
+- Added Access integration tests, browser build idempotency keys, and more
+  consistent pill spacing.
+
 ## 0.3.0 - 2026-07-26
 
 ### Security

@@ -4,8 +4,9 @@ import {
   createExecutionContext,
   waitOnExecutionContext,
 } from "cloudflare:test";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { D1Migration } from "@cloudflare/vitest-pool-workers";
+import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import worker from "../src/index";
 import type { Env } from "../src/index";
 import { ensureDatabaseSchema } from "../src/schema";
@@ -17,8 +18,37 @@ interface TestEnv extends Env {
 const testEnv = env as unknown as TestEnv;
 const LEGACY_PROJECT = "legacy-project";
 const LEGACY_BUILD = "legacy-build";
+const ACCESS_ISSUER = "https://kiln-team.cloudflareaccess.com";
+const ACCESS_AUDIENCE = "test-access-audience";
+const ACCESS_BINDINGS: Partial<Env> = {
+  CF_ACCESS_TEAM_DOMAIN: ACCESS_ISSUER,
+  CF_ACCESS_AUD: ACCESS_AUDIENCE,
+  KILN_API_KEY: undefined,
+};
+let accessAssertion = "";
 
 beforeAll(async () => {
+  const { privateKey, publicKey } = await generateKeyPair("RS256", { extractable: true });
+  const publicJwk = await exportJWK(publicKey);
+  publicJwk.kid = "kiln-test-key";
+  publicJwk.alg = "RS256";
+  accessAssertion = await new SignJWT({ type: "app", email: "maker@example.com" })
+    .setProtectedHeader({ alg: "RS256", kid: publicJwk.kid })
+    .setIssuer(ACCESS_ISSUER)
+    .setAudience(ACCESS_AUDIENCE)
+    .setSubject("access-user-id")
+    .setIssuedAt()
+    .setExpirationTime("5m")
+    .sign(privateKey);
+  const originalFetch = globalThis.fetch;
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.url === `${ACCESS_ISSUER}/cdn-cgi/access/certs`) {
+      return Response.json({ keys: [publicJwk] });
+    }
+    return originalFetch(input, init);
+  }));
+
   await applyD1Migrations(testEnv.DB, testEnv.TEST_MIGRATIONS.slice(0, 2));
   await testEnv.DB.batch([
     testEnv.DB.prepare(
@@ -33,11 +63,19 @@ beforeAll(async () => {
   await ensureDatabaseSchema(testEnv);
 });
 
-async function fetchWorker(path: string, init?: RequestInit): Promise<Response> {
+afterAll(() => {
+  vi.unstubAllGlobals();
+});
+
+async function fetchWorker(
+  path: string,
+  init?: RequestInit,
+  bindings?: Partial<Env>,
+): Promise<Response> {
   const context = createExecutionContext();
   const response = await worker.fetch(
     new Request(`https://kiln.example${path}`, init),
-    testEnv,
+    bindings ? Object.assign({}, testEnv, bindings) : testEnv,
     context,
   );
   await waitOnExecutionContext(context);
@@ -185,11 +223,11 @@ describe("MCP transport guardrails", () => {
       method: "POST",
       headers: {
         ...commonHeaders,
-        Authorization: "Bearer test-api-key",
+        "Cf-Access-Jwt-Assertion": accessAssertion,
         "MCP-Session-Id": session!,
       },
       body: toolCall,
-    });
+    }, ACCESS_BINDINGS);
     expect(allowed.status).toBe(200);
     expect((await mcpJson(allowed)).result.structuredContent.ok).toBe(true);
 
@@ -264,6 +302,53 @@ describe("MCP transport guardrails", () => {
 });
 
 describe("REST authorization and validation", () => {
+  it("uses a validated Cloudflare Access identity for browser sessions and writes", async () => {
+    const accessHeaders = { "Cf-Access-Jwt-Assertion": accessAssertion };
+    const session = await fetchWorker("/api/session", { headers: accessHeaders }, ACCESS_BINDINGS);
+    expect(session.status).toBe(200);
+    expect(await session.json()).toEqual({
+      authenticated: true,
+      identity: { method: "access", email: "maker@example.com" },
+      permissions: { mutate: true, compute: true },
+    });
+
+    const slug = `access-${crypto.randomUUID().slice(0, 12)}`;
+    const created = await fetchWorker("/api/projects", {
+      method: "POST",
+      headers: {
+        ...accessHeaders,
+        "Content-Type": "application/json",
+        Origin: "https://kiln.example",
+      },
+      body: JSON.stringify({ slug }),
+    }, ACCESS_BINDINGS);
+    expect(created.status).toBe(201);
+
+    const crossOrigin = await fetchWorker("/api/projects", {
+      method: "POST",
+      headers: {
+        ...accessHeaders,
+        "Content-Type": "application/json",
+        Origin: "https://evil.example",
+      },
+      body: JSON.stringify({ slug: `${slug}-blocked` }),
+    }, ACCESS_BINDINGS);
+    expect(crossOrigin.status).toBe(403);
+    expect((await crossOrigin.json<{ code: string }>()).code).toBe("CROSS_ORIGIN_WRITE_FORBIDDEN");
+  });
+
+  it("rejects an Access assertion with the wrong application audience", async () => {
+    const response = await fetchWorker("/api/session", {
+      headers: { "Cf-Access-Jwt-Assertion": accessAssertion },
+    }, {
+      CF_ACCESS_TEAM_DOMAIN: ACCESS_ISSUER,
+      CF_ACCESS_AUD: "another-application",
+      KILN_API_KEY: undefined,
+    });
+    expect(response.status).toBe(200);
+    expect((await response.json<{ authenticated: boolean }>()).authenticated).toBe(false);
+  });
+
   it("keeps reads public and writes protected", async () => {
     const list = await fetchWorker("/api/projects");
     expect(list.status).toBe(200);

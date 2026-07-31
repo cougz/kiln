@@ -5,8 +5,8 @@ release contract is version 0.3.0.
 
 ## Current: Operate 0.3.x
 
-- Keep public reads and API-key-protected writes/compute stable across REST and
-  MCP.
+- Keep public reads and Access-protected writes/compute stable across REST and
+  MCP while retiring the transition API key.
 - Preserve exact source and artifact provenance and canonical build IDs.
 - Keep the OpenAPI description, API guide, skill, MCP metadata, and browser UI
   synchronized with implementation changes.
@@ -16,21 +16,21 @@ release contract is version 0.3.0.
 
 ## Next: Test and Operate
 
-- Expand the 15 Worker/MCP integration tests into build quotas, lifecycle races,
+- Expand the 17 Worker/MCP integration tests into build quotas, lifecycle races,
   conditional artifact reads, authenticated compute execution, and resource-read
   coverage with deterministic engine and Workflow fakes.
 - Add an R2 archive audit command and operational metrics for queue age,
   attempt count, archive failures, cancellations, and stale reconciliation.
-- Design a key-rotation overlap mechanism or a short maintenance procedure for
-  the current single-key model.
+- Validate Managed OAuth interoperability with supported RFC 8707 MCP clients
+  and document service-token automation.
 - Add source/build comparison views without weakening immutable history.
 
 ## Later: Product Boundaries
 
 - Private projects, accounts, and multi-user authorization only after a clear
   tenancy and data-retention design exists.
-- A real OAuth provider only when delegated clients and scoped access are
-  required; no OAuth metadata should be published before then.
+- Project-scoped roles and delegated authorization only after accounts,
+  tenancy, and private-project boundaries are defined.
 - Optional model-assisted authoring only as a separate layer over the existing
   deterministic REST/MCP contract.
 - On-demand rendering and richer assembly inspection if resource accounting

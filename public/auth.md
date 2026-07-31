@@ -1,25 +1,97 @@
 # kiln Authentication
 
-kiln 0.3.0 uses one deployment-managed API key. There is no OAuth provider,
-authorization-code flow, device flow, dynamic client registration, user login,
-token refresh, scope model, or token issuance endpoint.
+kiln supports Cloudflare Access for browser sessions and Managed OAuth for MCP
+clients. Both flows use the same Access policies and upstream identity provider.
+The Worker validates the signed Access application JWT before granting write or
+compute permissions.
 
-## What Requires a Key
+## Browser Flow
 
-Public REST and MCP reads need no credentials. A key is required to:
+Protect the browser hostname with a Cloudflare Access self-hosted application.
+An unauthenticated browser is redirected to the Cloudflare Access team domain,
+which redirects to the configured SSO provider. After login, Access stores the
+application session in an HTTP-only `CF_Authorization` cookie.
 
-- Create a project or edit its public metadata.
-- Add source versions or parameters.
-- Create or replace project documents.
-- Queue, retry, or cancel builds.
-- Run geometry measurement or target checks.
+The browser application does not handle OAuth access tokens or store credentials
+in JavaScript. Same-origin API requests carry the Access cookie automatically.
+Cloudflare verifies the cookie and forwards a signed `Cf-Access-Jwt-Assertion`
+header to the Worker. The Worker validates its signature, issuer, audience, and
+expiry before trusting the user identity.
 
-The key grants all write and compute capabilities. kiln 0.3.0 does not issue
-different roles or per-project keys.
+Use `/cdn-cgi/access/logout` to end the Access browser session. `GET
+/api/session` returns a sanitized view of the current authentication method,
+email when available, and write/compute permissions.
 
-## Send the Key
+## MCP Managed OAuth Flow
 
-Use either header over HTTPS:
+Enable Managed OAuth on the Access application protecting the MCP endpoint.
+Compatible clients discover Cloudflare's authorization server through the
+`WWW-Authenticate` protected-resource metadata, dynamically register when
+allowed, and complete authorization code with PKCE. The user signs in through
+the same Access team domain and SSO provider as the browser application.
+
+Managed OAuth requires an OAuth client that supports RFC 8707 resource
+indicators. Cloudflare issues an opaque access token to the client. The Worker
+does not decode that token; Access validates it and forwards the same signed
+`Cf-Access-Jwt-Assertion` used for browser sessions.
+
+Recommended Managed OAuth settings are:
+
+- Access token lifetime of 5 to 15 minutes.
+- Grant session duration of one to two weeks.
+- Localhost and loopback redirects only when desktop clients require them.
+- Explicit HTTPS redirect URI patterns for hosted clients.
+- Dynamic client registration only when required by supported clients.
+
+Use an Access service token for unattended automation where no user can
+complete an interactive login.
+
+## Worker Configuration
+
+Set both non-secret Worker variables:
+
+```dotenv
+CF_ACCESS_TEAM_DOMAIN=https://your-team.cloudflareaccess.com
+CF_ACCESS_AUD=your-access-application-audience
+```
+
+`CF_ACCESS_AUD` accepts a comma-separated list when the same Worker serves
+separate browser and MCP Access applications. The Worker accepts only RS256
+application JWTs issued by `CF_ACCESS_TEAM_DOMAIN` for one of those audiences.
+It uses the Access `sub` claim as the stable user identity. Service-token
+assertions use their `common_name` identity.
+
+Configure these values in the Cloudflare dashboard or the deployment's Wrangler
+environment. They are deployment identifiers, not credentials, but they must
+match the Access applications exactly. `/api/health` reports
+`access_auth_configured` and the combined `write_auth_configured` state.
+
+The Worker must still validate Access JWTs even though Access runs at the edge.
+This prevents a direct or accidentally unprotected route from spoofing the
+`Cf-Access-Jwt-Assertion` header. Disable the default `workers.dev` route when
+custom domains are the only intended entry points, or attach the Access
+application directly to the Worker so every route is protected.
+
+## Recommended Hostnames
+
+Use separate hostnames when browser and MCP policies or session controls differ:
+
+| Host | Access application | Purpose |
+|---|---|---|
+| `studio.example.com` | Self-hosted | Browser workspace and same-origin REST API |
+| `mcp.example.com/mcp` | MCP server with Managed OAuth | Interactive MCP clients |
+| `kiln.example.com` | Optional public hostname | Public gallery and artifacts |
+
+Access applications match hostnames and paths, not HTTP methods. To preserve
+public reads while requiring Access for writes, use separate public and studio
+hostnames or keep authorization in the Worker. One multi-domain Access
+application can serve both browser and MCP traffic when they intentionally share
+the same policies.
+
+## API-Key Transition
+
+`KILN_API_KEY` remains an optional compatibility and local-development fallback
+for existing REST and MCP automation. Send it in either header:
 
 ```http
 Authorization: Bearer <key>
@@ -29,75 +101,26 @@ Authorization: Bearer <key>
 X-Kiln-API-Key: <key>
 ```
 
-If both headers are sent, they must contain the same key. Do not put the key in
-a URL or query string.
+The browser application no longer accepts or stores this key. New interactive
+clients should use Cloudflare Access. Do not put any credential in a URL,
+project, source file, parameter, document, log, or artifact.
 
-REST example:
+## Origin and Permission Checks
 
-```sh
-curl --fail-with-body -X PATCH \
-  -H "Authorization: Bearer ${KILN_API_KEY}" \
-  -H 'Content-Type: application/json' \
-  -d '{"description":"Updated public description"}' \
-  https://kiln.timcf.workers.dev/api/projects/example-project
-```
+An authenticated Access identity currently receives both write and compute
+permissions after it passes the Access application policy. API-key fallback
+authentication grants the same capabilities. kiln does not yet implement
+project-specific roles.
 
-MCP clients should configure one of the same headers on the absolute endpoint:
+Access-authenticated REST writes with a browser `Origin` header must be
+same-origin. MCP retains its explicit browser-origin allowlist. Requests without
+valid authentication receive `401 AUTH_REQUIRED`; valid identities without a
+required capability receive `403 INSUFFICIENT_PERMISSION`.
 
-```text
-https://kiln.timcf.workers.dev/mcp
-```
+## Public Data Boundary
 
-The Worker validates the key on every protected MCP `tools/call` request. An
-authenticated initialization does not authorize later calls without the key,
-and rotating the Worker secret invalidates the old key for existing sessions.
-
-The browser application accepts a key for protected authoring. It stores the
-value only in `sessionStorage` for the current tab and sends it as Bearer
-authorization. Clear it on shared machines and close the tab after use.
-
-## Obtain or Configure a Key
-
-The public service does not expose self-service key creation. Obtain the key
-from the deployment operator through a secret-management channel.
-
-Operators configure production with:
-
-```sh
-npx wrangler secret put KILN_API_KEY
-```
-
-For local development, put `KILN_API_KEY` in the git-ignored `.dev.vars` file.
-Use a different value from production.
-
-If the Worker secret is absent, protected operations remain locked and return
-`401`; they do not become open. `/api/health` reports the boolean
-`write_auth_configured` so operators can detect this state without revealing
-the key.
-
-## Failures
-
-- `401 AUTH_REQUIRED` means the key was absent, malformed, empty, mismatched,
-  or invalid. REST includes `WWW-Authenticate: Bearer`.
-- `403 INSUFFICIENT_PERMISSION` means an authenticated context lacks the
-  requested capability. The current shared deployment key grants both
-  capabilities, but clients should still handle this status.
-- `429 RATE_LIMITED` means the key identity exceeded a mutation or compute
-  window. REST includes `Retry-After`.
-
-Never log the key or include it in bug reports. Request and error IDs are safe
-correlation values; authorization headers are not.
-
-## Rotation
-
-Version 0.3.0 supports one active key, without an overlap window. Coordinate
-writers, replace the Worker secret, verify that the old value receives `401`,
-then update clients through their secret stores. Rotate immediately after any
-suspected disclosure.
-
-## Public Data Is Still Public
-
-Authentication protects changes and compute consumption, not confidentiality.
-Project metadata, all source history, parameters, documents, build settings,
-logs and reports, manifests, and artifacts are readable without a key. Never
-submit a credential, private design, personal data, or regulated information.
+Authentication protects changes and compute consumption, not confidentiality on
+the public hostname. Project metadata, all source history, parameters, documents,
+build settings, logs and reports, manifests, and artifacts remain public unless
+the entire read surface is placed behind Access. Never submit credentials,
+private designs, personal data, or regulated information.

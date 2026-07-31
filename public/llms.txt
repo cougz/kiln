@@ -1,12 +1,13 @@
 # kiln 0.3.0
 
 > Public versioned CadQuery projects and immutable build archives, with
-> API-key-protected authoring and bounded geometry compute.
+> Cloudflare Access-protected authoring and bounded geometry compute.
 
 Production: https://kiln.timcf.workers.dev/
 
-All stored project data is public. Writes and compute require KILN_API_KEY via
-Authorization: Bearer <key> or X-Kiln-API-Key: <key>. There is no OAuth service.
+All stored project data is public on the public hostname. Browser authoring uses
+Cloudflare Access SSO. RFC 8707-capable MCP clients use Access Managed OAuth.
+KILN_API_KEY remains an optional automation and local-development fallback.
 
 Geometry results are bounded preflight heuristics. They do not certify
 printability, support requirements, fit, strength, manufacturing quality,
@@ -27,11 +28,12 @@ put_source, get_source, list_source_history, set_params, get_params, put_doc,
 get_doc, run_build, retry_build, cancel_build, get_build, list_builds,
 list_artifacts, get_artifact_url, verify_target, measure.
 
-Public read tools require no key. Write tools and compute tools require the API
-key. Tool calls return structured {ok,data} or {ok,error} envelopes, stable
-error fields, behavior annotations, and text equivalents. get_artifact_url also
-returns a resource link. Send the key on every protected tools/call request;
-session initialization is not authorization.
+Public read tools require no credentials. Write and compute tools require a
+validated Access identity or the transition API key. Tool calls return
+structured {ok,data} or {ok,error} envelopes, stable error fields, behavior
+annotations, and text equivalents. get_artifact_url also returns a resource
+link. Access Managed OAuth is the preferred interactive authentication flow;
+authorization is checked on every protected tools/call.
 
 Five public resource templates:
 - kiln://projects/{slug}
@@ -53,7 +55,8 @@ terminal-build inputs.
 - GET /api/health and GET /api/engine/healthz are public health endpoints.
 - GET /api/projects and all project/source/history/params/docs/build/artifact
   reads are public.
-- POST/PATCH/PUT project data requires the API key.
+- GET /api/session returns sanitized authentication and permission state.
+- POST/PATCH/PUT project data requires Access or the transition API key.
 - POST /api/projects/{slug}/builds queues compute with printer_profile x/y/z.
 - POST /api/projects/{slug}/builds/{id}/cancel cancels active work.
 - POST /api/projects/{slug}/builds/{id}/retry queues exact pinned inputs.

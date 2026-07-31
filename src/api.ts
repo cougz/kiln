@@ -11,6 +11,8 @@ export interface ApiAuthorizationContext {
   subject: string;
   canMutate: boolean;
   canCompute: boolean;
+  method?: "access" | "api_key";
+  email?: string;
 }
 
 const projectSchema = z.object({
@@ -97,9 +99,26 @@ async function route(
   requestId: string,
 ): Promise<Response> {
   const segments = url.pathname.split("/").filter(Boolean);
-  if (segments[0] !== "api" || segments[1] !== "projects") {
+  if (segments[0] !== "api") {
     throw new ApiError(404, "not found", "ROUTE_NOT_FOUND");
   }
+
+  if (segments[1] === "session" && segments.length === 2) {
+    requireMethod(req, "GET");
+    return json({
+      authenticated: Boolean(authorization),
+      identity: authorization ? {
+        method: authorization.method ?? "api_key",
+        email: authorization.email ?? null,
+      } : null,
+      permissions: {
+        mutate: authorization?.canMutate === true,
+        compute: authorization?.canCompute === true,
+      },
+    }, 200, requestId);
+  }
+
+  if (segments[1] !== "projects") throw new ApiError(404, "not found", "ROUTE_NOT_FOUND");
 
   if (segments.length === 2) {
     if (req.method === "GET") {
@@ -275,10 +294,29 @@ async function protect(
   }
   const allowed = permission === "mutate" ? authorization.canMutate : authorization.canCompute;
   if (!allowed) throw new ApiError(403, "permission denied", "INSUFFICIENT_PERMISSION");
+  if (authorization.method === "access") requireSameOriginBrowserWrite(req);
   if (permission === "compute") {
     await rateLimit(env, req, authorization, "compute", 10, 60);
   } else {
     await rateLimit(env, req, authorization, "mutate", 60, 60);
+  }
+}
+
+function requireSameOriginBrowserWrite(req: Request): void {
+  const fetchSite = req.headers.get("Sec-Fetch-Site")?.toLowerCase();
+  if (fetchSite === "cross-site") {
+    throw new ApiError(403, "cross-origin browser writes are not allowed", "CROSS_ORIGIN_WRITE_FORBIDDEN");
+  }
+  const origin = req.headers.get("Origin");
+  if (origin === null) return;
+  let requestOrigin: string;
+  try {
+    requestOrigin = new URL(req.url).origin;
+  } catch {
+    throw new ApiError(403, "cross-origin browser writes are not allowed", "CROSS_ORIGIN_WRITE_FORBIDDEN");
+  }
+  if (origin !== requestOrigin) {
+    throw new ApiError(403, "cross-origin browser writes are not allowed", "CROSS_ORIGIN_WRITE_FORBIDDEN");
   }
 }
 

@@ -2,11 +2,10 @@
 
 const $app = document.getElementById("app");
 const $status = document.getElementById("status");
-const $apiKey = document.getElementById("api-key");
-const $apiKeyStatus = document.getElementById("api-key-status");
-const $clearApiKey = document.getElementById("clear-api-key");
+const $sessionIdentity = document.getElementById("session-identity");
+const $sessionHelp = document.getElementById("session-help");
+const $sessionLogout = document.getElementById("session-logout");
 
-const API_KEY_STORAGE = "kiln.apiKey";
 const DOC_KINDS = ["specification", "instructions", "bom", "page"];
 const POLL_DELAYS = [3000, 5000, 8000, 13000, 21000, 30000];
 const MAX_MARKDOWN_PREVIEWS = 8;
@@ -48,38 +47,6 @@ const esc = (value) =>
 
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object ?? {}, key);
 
-function getApiKey() {
-  try {
-    return sessionStorage.getItem(API_KEY_STORAGE) || "";
-  } catch {
-    return $apiKey.value || "";
-  }
-}
-
-function setApiKey(value) {
-  const key = value.trim();
-  try {
-    if (key) sessionStorage.setItem(API_KEY_STORAGE, key);
-    else sessionStorage.removeItem(API_KEY_STORAGE);
-  } catch {
-    // Storage can be unavailable in hardened browsers; the input still lasts
-    // for the life of this page.
-  }
-  $apiKeyStatus.textContent = key
-    ? "API key saved for this tab. Protected writes are enabled."
-    : "API key cleared. Public read access remains available.";
-  document.body.classList.toggle("has-api-key", Boolean(key));
-}
-
-$apiKey.value = getApiKey();
-document.body.classList.toggle("has-api-key", Boolean($apiKey.value));
-$apiKey.addEventListener("input", () => setApiKey($apiKey.value));
-$clearApiKey.addEventListener("click", () => {
-  $apiKey.value = "";
-  setApiKey("");
-  $apiKey.focus();
-});
-
 class ApiRequestError extends Error {
   constructor(message, status) {
     super(message);
@@ -91,12 +58,7 @@ class ApiRequestError extends Error {
 async function request(path, options = {}) {
   const { write = false, responseType = "json", ...fetchOptions } = options;
   const headers = new Headers(fetchOptions.headers || {});
-  if (write) {
-    const key = getApiKey();
-    if (!key) throw new ApiRequestError("Add an API key above before making protected changes.", 401);
-    headers.set("Authorization", `Bearer ${key}`);
-  }
-  const response = await fetch(`/api${path}`, { ...fetchOptions, headers });
+  const response = await fetch(`/api${path}`, { credentials: "same-origin", ...fetchOptions, headers });
   const text = await response.text();
   let body = text;
   if (responseType === "json") {
@@ -109,6 +71,9 @@ async function request(path, options = {}) {
   }
   if (!response.ok) {
     const detail = typeof body === "object" && body?.error ? body.error : text;
+    if (write && response.status === 401) {
+      throw new ApiRequestError("Sign in through Cloudflare Access before making protected changes.", 401);
+    }
     throw new ApiRequestError(detail || `${response.status} ${response.statusText}`, response.status);
   }
   return body;
@@ -116,14 +81,36 @@ async function request(path, options = {}) {
 
 const api = (path, options = {}) => request(path, options);
 
-function writeApi(path, method, body, signal) {
+function writeApi(path, method, body, signal, additionalHeaders = {}) {
   return request(path, {
     method,
     write: true,
     signal,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...additionalHeaders },
     body: JSON.stringify(body ?? {}),
   });
+}
+
+async function loadSession() {
+  try {
+    const session = await api("/session");
+    if (!session.authenticated) {
+      $sessionIdentity.textContent = "Public read-only session";
+      $sessionHelp.textContent = "Open the Access-protected studio hostname to create, edit, or build.";
+      $sessionLogout.hidden = true;
+      return;
+    }
+    const accessSession = session.identity?.method === "access";
+    $sessionIdentity.textContent = session.identity?.email || (accessSession ? "Authenticated Access user" : "Authenticated API client");
+    $sessionHelp.textContent = accessSession
+      ? "Access policies authorize protected writes and compute."
+      : "This request used the deployment API-key fallback.";
+    $sessionLogout.hidden = !accessSession;
+  } catch {
+    $sessionIdentity.textContent = "Session unavailable";
+    $sessionHelp.textContent = "Authentication state could not be loaded.";
+    $sessionLogout.hidden = true;
+  }
 }
 
 function sourcePath(path) {
@@ -218,6 +205,7 @@ function renderServiceStatus() {
         { name: "D1 metadata", value: health.d1, ready: "ready", unavailable: "unavailable" },
         { name: "R2 archive", value: health.r2, ready: "ready", unavailable: "unavailable" },
         { name: "Build workflow", value: health.workflow_configured, ready: "configured", unavailable: "not configured" },
+        { name: "Cloudflare Access", value: health.access_auth_configured, ready: "configured", unavailable: "not configured" },
         { name: "Write authorization", value: health.write_auth_configured, ready: "configured", unavailable: "not configured" },
         ...(health.engine ? [{ name: "CAD engine", value: health.engine.ok, ready: "ready", unavailable: "unavailable" }] : []),
       ]
@@ -267,7 +255,8 @@ async function refreshServiceStatus() {
   renderServiceStatus();
 }
 
-// WebMCP is a read-only progressive enhancement. It never receives the API key.
+// WebMCP is a read-only progressive enhancement. Access credentials remain in
+// the browser cookie and are never passed into the model context.
 if (document.modelContext?.registerTool) {
   const webMcp = new AbortController();
   const register = (tool) => document.modelContext.registerTool(tool, { signal: webMcp.signal }).catch(() => {});
@@ -492,7 +481,7 @@ async function routeGallery(context) {
           <div class="eyebrow">// PROTECTED WRITE</div>
           <h2 id="create-heading">Create a project</h2>
         </div>
-        <span class="access-chip">API key required</span>
+        <span class="access-chip">Access required</span>
       </div>
       <p class="section-intro">Start empty or install a small parameterized CadQuery box so the source, parameters, and build workflow are immediately ready to explore.</p>
       <form id="create-form">
@@ -525,7 +514,7 @@ async function routeGallery(context) {
       </form>
     </section>
     <section aria-labelledby="projects-heading">
-      <div class="section-heading"><h2 id="projects-heading">Public projects</h2><span class="access-chip access-chip--public">No key required</span></div>
+      <div class="section-heading"><h2 id="projects-heading">Public projects</h2><span class="access-chip access-chip--public">Public read</span></div>
       <div id="project-list" aria-live="polite">Loading projects...</div>
     </section>
   `;
@@ -570,7 +559,7 @@ async function routeGallery(context) {
     if (!isCurrent(context)) return;
     const list = $app.querySelector("#project-list");
     if (!projects.length) {
-      list.innerHTML = `<p class="empty">No projects yet. Add an API key and create one above, or connect an agent over MCP.</p>`;
+      list.innerHTML = `<p class="empty">No projects yet. Sign in through Cloudflare Access and create one above, or connect an agent over MCP.</p>`;
       return;
     }
     list.className = "card-grid";
@@ -659,7 +648,7 @@ async function routeProject(slug, context) {
       <section class="k-card workspace-card" aria-labelledby="source-heading">
         <div class="section-heading">
           <div><h2 id="source-heading">Project source</h2><p>Read the latest public revision or save a new protected version.</p></div>
-          <span class="access-chip">Writes need key</span>
+          <span class="access-chip">Access write</span>
         </div>
         <div class="source-toolbar">
           <label class="field">
@@ -708,7 +697,7 @@ async function routeProject(slug, context) {
         <section class="k-card" aria-labelledby="build-heading">
           <div class="section-heading">
             <div><h2 id="build-heading">Queue a build</h2><p>The exact source and parameters are pinned when queued.</p></div>
-            <span class="access-chip">Protected</span>
+            <span class="access-chip">Access compute</span>
           </div>
           <form id="build-form">
             <label class="field">
@@ -961,6 +950,7 @@ function bindParams(slug, parameterData, context) {
 function bindBuildForm(slug, context) {
   const form = $app.querySelector("#build-form");
   const state = $app.querySelector("#build-state");
+  form.addEventListener("input", () => { delete form.dataset.idempotencyKey; });
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const data = new FormData(form);
@@ -977,7 +967,16 @@ function bindBuildForm(slug, context) {
     setBusy(button, true, "Queueing...");
     setMessage(state, "Pinning the current project and queueing build...");
     try {
-      const result = await writeApi(`/projects/${encodeURIComponent(slug)}/builds`, "POST", body, context.signal);
+      const idempotencyKey = form.dataset.idempotencyKey || crypto.randomUUID();
+      form.dataset.idempotencyKey = idempotencyKey;
+      const result = await writeApi(
+        `/projects/${encodeURIComponent(slug)}/builds`,
+        "POST",
+        body,
+        context.signal,
+        { "Idempotency-Key": idempotencyKey },
+      );
+      delete form.dataset.idempotencyKey;
       location.hash = routeHref(slug, `/b/${encodeURIComponent(result.build_id)}`);
     } catch (error) {
       if (!isAbort(error)) setMessage(state, error.message, true);
@@ -1280,7 +1279,11 @@ function bindBuildActions(slug, buildId, context) {
       const actionPath = action === "cancel"
         ? `/projects/${encodeURIComponent(slug)}/builds/${encodeURIComponent(buildId)}/cancel`
         : `/projects/${encodeURIComponent(slug)}/builds/${encodeURIComponent(buildId)}/retry`;
-      const result = await writeApi(actionPath, "POST", {}, context.signal);
+      const headers = action === "retry"
+        ? { "Idempotency-Key": button.dataset.idempotencyKey || (button.dataset.idempotencyKey = crypto.randomUUID()) }
+        : {};
+      const result = await writeApi(actionPath, "POST", {}, context.signal, headers);
+      delete button.dataset.idempotencyKey;
       if (action === "retry" && result.build_id && result.build_id !== buildId) {
         location.hash = routeHref(slug, `/b/${encodeURIComponent(result.build_id)}`);
       } else {
@@ -1418,3 +1421,4 @@ setInterval(() => {
 }, 30_000);
 route();
 refreshServiceStatus();
+loadSession();

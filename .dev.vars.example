@@ -1,0 +1,6 @@
+# Optional local fallback when Cloudflare Access is not in front of wrangler dev.
+KILN_API_KEY=replace-with-a-local-only-key
+
+# Set these in a deployed environment to validate Cloudflare Access assertions.
+# CF_ACCESS_TEAM_DOMAIN=https://your-team.cloudflareaccess.com
+# CF_ACCESS_AUD=studio-application-audience,mcp-application-audience

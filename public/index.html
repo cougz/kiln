@@ -18,17 +18,16 @@
 <section class="access-bar" aria-labelledby="access-heading">
   <div class="access-bar__inner">
     <div class="access-bar__copy">
-      <strong id="access-heading">Public to read. Protected to write.</strong>
-      <span>Projects, builds, and artifacts are visible to everyone. Creating or changing anything requires an API key.</span>
+      <strong id="access-heading">Cloudflare Access identity</strong>
+      <span>Browser sessions use Access SSO. Compatible MCP clients use Managed OAuth through the same identity policies.</span>
     </div>
-    <div class="session-key">
-      <label for="api-key">API key for this tab</label>
-      <div class="session-key__control">
-        <input id="api-key" type="password" autocomplete="off" spellcheck="false" aria-describedby="api-key-help" placeholder="Paste API key">
-        <button class="k-btn k-btn--ghost k-btn--sm" id="clear-api-key" type="button">Clear</button>
+    <div class="session-user" aria-live="polite">
+      <div class="session-user__copy">
+        <span class="session-user__label">Session</span>
+        <strong id="session-identity">Checking authentication...</strong>
+        <span id="session-help">Protected changes require an authenticated Access session.</span>
       </div>
-      <span id="api-key-help">Kept only in <code>sessionStorage</code>; sent as Bearer authorization on writes.</span>
-      <span class="sr-only" id="api-key-status" role="status" aria-live="polite"></span>
+      <a class="k-btn k-btn--ghost k-btn--sm" id="session-logout" href="/cdn-cgi/access/logout" hidden>Sign out</a>
     </div>
   </div>
 </section>
@@ -37,7 +36,7 @@
 </main>
 <footer class="k-footer">
   <div class="k-footer-inner">
-    Public REST and MCP reads; protected writes and compute require an API key · MCP: <code>/mcp</code> · server metadata: <a href="/server.json"><code>/server.json</code></a> ·
+    Public reads; protected writes and compute use Cloudflare Access · MCP: <code>/mcp</code> · server metadata: <a href="/server.json"><code>/server.json</code></a> ·
     <a href="/llms.txt">llms.txt</a> ·
     <a href="https://github.com/cougz/kiln">source</a>
   </div>
