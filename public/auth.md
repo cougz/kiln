@@ -24,7 +24,10 @@ email when available, and write/compute permissions.
 
 ## MCP Managed OAuth Flow
 
-Enable Managed OAuth on the Access application protecting the MCP endpoint.
+Enable Managed OAuth on the same whole-host Access application that protects
+the browser. Cloudflare does not allow Managed OAuth when an Access application
+domain contains a path. Leave the application's Path field empty; MCP clients
+still connect to the Worker's `/mcp` endpoint.
 Compatible clients discover Cloudflare's authorization server through the
 `WWW-Authenticate` protected-resource metadata, dynamically register when
 allowed, and complete authorization code with PKCE. The user signs in through
@@ -55,11 +58,12 @@ CF_ACCESS_TEAM_DOMAIN=https://your-team.cloudflareaccess.com
 CF_ACCESS_AUD=your-access-application-audience
 ```
 
-`CF_ACCESS_AUD` accepts a comma-separated list when the same Worker serves
-separate browser and MCP Access applications. The Worker accepts only RS256
-application JWTs issued by `CF_ACCESS_TEAM_DOMAIN` for one of those audiences.
-It uses the Access `sub` claim as the stable user identity. Service-token
-assertions use their `common_name` identity.
+Use the audience of the whole-host Access application. `CF_ACCESS_AUD` also
+accepts a comma-separated list for deployments that intentionally use multiple
+whole-host applications. The Worker accepts only RS256 application JWTs issued
+by `CF_ACCESS_TEAM_DOMAIN` for one of those audiences. It uses the Access `sub`
+claim as the stable user identity. Service-token assertions use their
+`common_name` identity.
 
 Configure these values in the Cloudflare dashboard or the deployment's Wrangler
 environment. They are deployment identifiers, not credentials, but they must
@@ -72,21 +76,24 @@ This prevents a direct or accidentally unprotected route from spoofing the
 custom domains are the only intended entry points, or attach the Access
 application directly to the Worker so every route is protected.
 
-## Recommended Hostnames
+## Access Application Scope
 
-Use separate hostnames when browser and MCP policies or session controls differ:
+The recommended setup uses one subdomain and one self-hosted Access application:
 
-| Host | Access application | Purpose |
-|---|---|---|
-| `studio.example.com` | Self-hosted | Browser workspace and same-origin REST API |
-| `mcp.example.com/mcp` | MCP server with Managed OAuth | Interactive MCP clients |
-| `kiln.example.com` | Optional public hostname | Public gallery and artifacts |
+| Access application domain | Path | Browser | MCP |
+|---|---|---|---|
+| `kiln.example.com` | Empty | `https://kiln.example.com/` | `https://kiln.example.com/mcp` |
 
-Access applications match hostnames and paths, not HTTP methods. To preserve
-public reads while requiring Access for writes, use separate public and studio
-hostnames or keep authorization in the Worker. One multi-domain Access
-application can serve both browser and MCP traffic when they intentionally share
-the same policies.
+Enable Managed OAuth on that application. Browser requests continue to use the
+normal Access redirect and cookie flow; RFC 8707-capable MCP clients receive the
+Managed OAuth challenge. Both flows produce assertions for the same application
+audience and policy.
+
+Do not create a second path-scoped Access application for `/mcp`. More-specific
+Access applications override whole-host policy inheritance, and Managed OAuth
+rejects application domains containing a path. Protecting the whole hostname
+also means project reads, artifacts, documentation, and health endpoints require
+an Access session.
 
 ## API-Key Transition
 

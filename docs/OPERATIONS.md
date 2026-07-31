@@ -45,12 +45,15 @@ Configure these non-secret variables in the deployment environment:
 
 ```dotenv
 CF_ACCESS_TEAM_DOMAIN=https://your-team.cloudflareaccess.com
-CF_ACCESS_AUD=studio-application-audience,mcp-application-audience
+CF_ACCESS_AUD=whole-host-application-audience
 ```
 
-Create a self-hosted Access application for the studio hostname and an MCP
-server application for the MCP endpoint. Enable Managed OAuth on the MCP
-application, configure only the redirect URI classes required by supported
+Create one self-hosted Access application for the complete kiln hostname with
+an empty Path field. Enable Managed OAuth on that same application. Browser
+users continue to use the normal Access cookie flow, while MCP clients connect
+to `/mcp` and use Managed OAuth. Cloudflare rejects Managed OAuth when any
+application domain contains a path, so do not create a second path-scoped MCP
+application. Configure only the redirect URI classes required by supported
 clients, and apply the intended identity or group policies. Use instant
 authentication when one SSO provider should receive users directly.
 

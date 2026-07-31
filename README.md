@@ -55,7 +55,7 @@ applications protecting the browser and MCP hostnames:
 
 ```dotenv
 CF_ACCESS_TEAM_DOMAIN=https://your-team.cloudflareaccess.com
-CF_ACCESS_AUD=browser-audience,mcp-audience
+CF_ACCESS_AUD=whole-host-application-audience
 ```
 
 The browser uses the Access session cookie without exposing it to JavaScript.
@@ -133,11 +133,12 @@ npx wrangler d1 migrations apply kiln --remote
 npm run deploy
 ```
 
-Before enabling browser or MCP writers, create the Cloudflare Access
-applications, enable Managed OAuth on the MCP application, configure
-`CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD`, and verify `/api/session` through
-both surfaces. Set `KILN_API_KEY` only while migrating existing automation or
-when a non-Access local environment needs it.
+Before enabling browser or MCP writers, create one whole-host Cloudflare Access
+application with no Path, enable Managed OAuth on that application, configure
+`CF_ACCESS_TEAM_DOMAIN` and its single `CF_ACCESS_AUD`, and verify
+`/api/session` through both flows. The MCP client URL still ends in `/mcp`; only
+the Access application domain must omit the path. Set `KILN_API_KEY` only while
+migrating existing automation or when a non-Access local environment needs it.
 
 Always run the explicit migration command. As a deployment safety gate, the
 Worker and Workflow also check migration `0003_build_provenance.sql` before

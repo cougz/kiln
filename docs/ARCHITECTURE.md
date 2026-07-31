@@ -153,9 +153,11 @@ Cloudflare Access is the primary interactive authentication boundary:
 - `KILN_API_KEY` remains an optional compatibility and local-development
   fallback; the browser no longer accepts or stores it.
 
-Separate browser and MCP Access applications may share the Worker. Their
-audience tags are configured as a comma-separated `CF_ACCESS_AUD` allowlist.
-Cloudflare Access still enforces each hostname's policy before the Worker runs.
+One whole-host self-hosted Access application protects the browser, REST API,
+and `/mcp`. Its domain has no path because Cloudflare rejects Managed OAuth on
+path-scoped application domains. The browser and MCP flows therefore share one
+application audience and policy; only their client authentication mechanisms
+differ.
 
 ## Discovery Metadata
 
