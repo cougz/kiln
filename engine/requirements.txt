@@ -1,4 +1,4 @@
-fastapi==0.115.14
+fastapi==0.141.1
 uvicorn==0.34.3
 trimesh==4.12.2
 numpy==2.4.6
