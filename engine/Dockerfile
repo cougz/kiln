@@ -1,7 +1,7 @@
 # kiln-engine — geometry execution container.
 # P1: full stack — cadquery/OCCT (B-rep), trimesh+manifold3d (mesh ops),
 # matplotlib (isometric previews). OCP wheels need libGL at import time.
-FROM python:3.12.13-slim
+FROM python:3.14.7-slim
 
 # fontconfig + DejaVu: OCCT's font manager needs at least one system font
 # or cadquery's .text() dies with an opaque AttributeError (see PLAN.md).
